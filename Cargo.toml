@@ -1,0 +1,13 @@
+[package]
+name = "skuld"
+version = "0.0.1"
+authors = ["Samuel Lim <39858145+amadeusine@users.noreply.github.com>", "Davi Silva <blueridanus@gmail.com>", "Wesley Norris <repnop@outlook.com>"]
+edition = "2018"
+description = "Asynchronous LDAP client library"
+readme = "README.md"
+repository = "https://github.com/amadeusine/skuld"
+license = "MIT OR Apache-2.0"
+keywords = ["async", "ldap", "client"]
+categories = ["asynchronous", "network-programming"]
+
+[dependencies]

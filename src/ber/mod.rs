@@ -11,6 +11,11 @@ use util::{ReadExt, VecExt};
 pub const OCTET_STRING_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x04);
 pub const INTEGER_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x02);
 pub const SEQUENCE_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x10);
+pub const ENUMERATED_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x0a);
+pub const NULL_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x05);
+pub const BOOL_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x01);
+
+#[derive(Debug, PartialEq)]
 pub enum DeserializeError {
     BadTag { expected: Tag, got: Tag },
     BufferTooShort,
@@ -18,11 +23,11 @@ pub enum DeserializeError {
     IntegerTooLarge,
     InvalidOid,
     InvalidUtf8,
-    InvaludValue,
+    InvalidValue,
 }
 
 pub trait Serialize {
-    fn serialize(&self, buffer: &mut Vec<u8>);
+    fn serialize(&self, buffer: &mut dyn VecExt);
 }
 
 pub trait Deserialize: Sized {
@@ -85,13 +90,13 @@ impl Tag {
         self.0 & 0x1F
     }
 
-    pub fn raw(self) -> u8 {
+    pub const fn raw(self) -> u8 {
         self.0
     }
 }
 
 impl Serialize for Tag {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         buffer.write_byte(self.raw());
     }
 }
@@ -122,7 +127,7 @@ impl Deserialize for Length {
 }
 
 impl Serialize for Length {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         if self.0 > 127 {
             buffer.write_byte(0x88);
             let ns = self.0.to_be_bytes();
@@ -143,7 +148,7 @@ impl std::ops::Add for Length {
 }
 
 impl Serialize for str {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         let length = Length::new(self.as_bytes().len() as u64);
 
         OCTET_STRING_TAG.serialize(buffer);
@@ -153,7 +158,7 @@ impl Serialize for str {
 }
 
 impl Serialize for String {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         str::serialize(&*self, buffer);
     }
 }
@@ -179,7 +184,7 @@ impl Deserialize for i32 {
 }
 
 impl Serialize for i32 {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         INTEGER_TAG.serialize(buffer);
         let ns = self.to_be_bytes();
         let start = if self.is_negative() {
@@ -210,13 +215,13 @@ impl Deserialize for u32 {
 }
 
 impl Serialize for u32 {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         (*self as i32).serialize(buffer);
     }
 }
 
 impl Serialize for i64 {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         INTEGER_TAG.serialize(buffer);
         let ns = self.to_be_bytes();
         let start = if self.is_negative() {
@@ -247,8 +252,59 @@ impl Deserialize for u64 {
 }
 
 impl Serialize for u64 {
-    fn serialize(&self, buffer: &mut Vec<u8>) {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
         (*self as i64).serialize(buffer);
+    }
+}
+
+pub struct Null;
+
+impl Deserialize for Null {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(NULL_TAG)?;
+        let length = Length::deserialize(buffer)?;
+        let _ = buffer.slice(length)?;
+
+        Ok(Null)
+    }
+}
+
+impl Serialize for Null {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        NULL_TAG.serialize(buffer);
+        Length::new(0).serialize(buffer);
+    }
+}
+
+impl<T: Serialize> Serialize for Vec<T> {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        SEQUENCE_TAG.serialize(buffer);
+
+        util::serialize_sequence(buffer, |buffer| {
+            for item in self {
+                item.serialize(buffer);
+            }
+        });
+    }
+}
+
+pub struct Set<T: Serialize>(Vec<T>);
+
+impl<T: Serialize> From<Vec<T>> for Set<T> {
+    fn from(v: Vec<T>) -> Self {
+        Self(v)
+    }
+}
+
+impl Serialize for bool {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        BOOL_TAG.serialize(buffer);
+        Length::new(1).serialize(buffer);
+
+        match self {
+            true => buffer.write_byte(0xFF),
+            false => buffer.write_byte(0x00),
+        }
     }
 }
 

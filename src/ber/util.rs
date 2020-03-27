@@ -1,29 +1,44 @@
-use super::{DeserializeError, Length, Tag};
+use super::{DeserializeError, Length, Serialize, Tag};
+use tinyvec::TinyVec;
 
-pub(crate) trait VecExt {
+pub trait VecExt {
     fn write(&mut self, slice: &[u8]);
     fn write_byte(&mut self, byte: u8);
 }
 
 impl VecExt for Vec<u8> {
     fn write(&mut self, slice: &[u8]) {
-        use std::io::Write;
-        self.write_all(slice).unwrap();
+        self.extend_from_slice(slice);
     }
     fn write_byte(&mut self, byte: u8) {
-        self.write(&[byte]);
+        self.push(byte);
+    }
+}
+
+impl VecExt for TinyVec<[u8; 32]> {
+    fn write(&mut self, slice: &[u8]) {
+        self.extend_from_slice(slice);
+    }
+    fn write_byte(&mut self, byte: u8) {
+        self.push(byte);
     }
 }
 
 pub(crate) trait ReadExt {
+    fn peek(&mut self) -> Result<u8, DeserializeError>;
     fn byte(&mut self) -> Result<u8, DeserializeError>;
     fn uint(&mut self, size: Length) -> Result<u64, DeserializeError>;
     fn int(&mut self, size: Length) -> Result<i64, DeserializeError>;
     fn slice(&mut self, size: Length) -> Result<&[u8], DeserializeError>;
     fn tag(&mut self, expected: Tag) -> Result<Tag, DeserializeError>;
+    fn peek_tag(&mut self, expected: Tag) -> Result<Tag, DeserializeError>;
 }
 
 impl ReadExt for &'_ [u8] {
+    fn peek(&mut self) -> Result<u8, DeserializeError> {
+        Ok(*self.get(0).ok_or(DeserializeError::BufferTooShort)?)
+    }
+
     fn byte(&mut self) -> Result<u8, DeserializeError> {
         let byte = *self.get(0).ok_or(DeserializeError::BufferTooShort)?;
         *self = &self[1..];
@@ -87,25 +102,25 @@ impl ReadExt for &'_ [u8] {
             Ok(tag)
         }
     }
+
+    fn peek_tag(&mut self, expected: Tag) -> Result<Tag, DeserializeError> {
+        let tag = Tag::new(self.peek()?);
+
+        if tag != expected {
+            Err(DeserializeError::BadTag { expected, got: tag })
+        } else {
+            Ok(tag)
+        }
+    }
 }
 
 /// This helper function creates a premade size and fills it in after the
 /// function is complete
-pub fn serialize_sequence<F: Fn(&mut Vec<u8>)>(buffer: &mut Vec<u8>, f: F) {
-    // long length, 2 bytes
-    buffer.write_byte(0x82);
-
-    let length_idx = buffer.len();
-    buffer.write(&[0, 0]);
-
-    let start_length = buffer.len();
-
-    f(buffer);
-
-    let sequence_length = buffer.len() - start_length;
-    debug_assert!(sequence_length <= u16::max_value() as usize);
-
-    buffer[length_idx..length_idx + 2].copy_from_slice(&(sequence_length as u16).to_be_bytes()[..])
+pub fn serialize_sequence<F: Fn(&mut dyn VecExt)>(buffer: &mut dyn VecExt, f: F) {
+    let mut temp_vec: TinyVec<[u8; 32]> = TinyVec::new();
+    f(&mut temp_vec);
+    Length::new(temp_vec.len() as u64).serialize(buffer);
+    buffer.write(&temp_vec);
 }
 
 #[cfg(test)]
@@ -120,6 +135,6 @@ mod tests {
             10i32.serialize(buffer);
         });
 
-        assert_eq!(buffer, &[0x82, 0x00, 0x03, 0x02, 0x01, 0x0a]);
+        assert_eq!(buffer, &[0x03, 0x02, 0x01, 0x0a]);
     }
 }

@@ -11,3 +11,4 @@ keywords = ["async", "ldap", "client"]
 categories = ["asynchronous", "network-programming"]
 
 [dependencies]
+tinyvec = { version = "0.3.3", features = ["alloc"] }

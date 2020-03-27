@@ -10,5 +10,5 @@
 #![warn(missing_docs)]
 #![allow(dead_code)]
 
-mod ber;
-mod protocol_types;
+pub mod ber;
+pub mod protocol_types;

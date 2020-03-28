@@ -1,11 +1,91 @@
+mod abandon;
+mod bind;
+mod compare;
+mod extended;
+mod modify;
+mod search;
+
 use crate::ber::{
     util::{serialize_sequence, ReadExt, VecExt},
     Aspect, Class, Deserialize, DeserializeError, Length, Serialize, Set, Tag, ENUMERATED,
     SEQUENCE,
 };
 
+pub use {abandon::*, bind::*, compare::*, extended::*, modify::*, search::*};
+
+pub type AssertionValue = String;
+pub type AttributeValue = String;
+pub type Uri = String;
+
+/// A UTF-8 string that is constrained to <attributedescription>
+#[derive(Clone, Debug, PartialEq)]
+pub struct AttributeDescription(String);
+
+impl Deserialize for AttributeDescription {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        let string = String::deserialize(buffer)?;
+
+        // TODO: Validate string format
+
+        Ok(AttributeDescription(string))
+    }
+}
+
+impl Serialize for AttributeDescription {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        self.0.serialize(buffer);
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LdapRelativeDn(pub String);
+
+/// Wrapper type around a UTF-8 encoded string that is restricted to
+/// <numericoid> -- which I assume to be of the format:
+///
+/// [012].(\d)+(\.\d+)+
+///
+/// Can't actually find the definition point for it
+#[derive(Clone, Debug, PartialEq)]
+pub struct LdapOid(String);
+
+impl Deserialize for LdapOid {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        let string = String::deserialize(buffer)?;
+
+        // TODO: Validate string format
+
+        Ok(LdapOid(string))
+    }
+}
+
+impl Serialize for LdapOid {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        self.0.serialize(buffer);
+    }
+}
+
+/// Wrapper type around a UTF-8 encoded string that is restricted to
+/// <distinguishedName> which seems to be a comma separated list of
+/// <relativeDistinguishedName>
+#[derive(Clone, Debug, PartialEq)]
+pub struct LdapDn(pub String);
+
+impl Deserialize for LdapDn {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        let string = String::deserialize(buffer)?;
+
+        // TODO: Validate string format
+
+        Ok(LdapDn(string))
+    }
+}
+
+impl Serialize for LdapDn {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        self.0.serialize(buffer);
+    }
+}
 
 const CONTROLS: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 0);
 
@@ -189,55 +269,6 @@ pub struct Control {
     pub criticality: bool,
     pub control_value: Option<String>,
 }
-
-/// Wrapper type around a UTF-8 encoded string that is restricted to
-/// <numericoid> -- which I assume to be of the format:
-///
-/// [012].(\d)+(\.\d+)+
-///
-/// Can't actually find the definition point for it
-#[derive(Clone, Debug, PartialEq)]
-pub struct LdapOid(String);
-
-impl Deserialize for LdapOid {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        let string = String::deserialize(buffer)?;
-
-        // TODO: Validate string format
-
-        Ok(LdapOid(string))
-    }
-}
-
-impl Serialize for LdapOid {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        self.0.serialize(buffer);
-    }
-}
-
-/// Wrapper type around a UTF-8 encoded string that is restricted to
-/// <distinguishedName> which seems to be a comma separated list of
-/// <relativeDistinguishedName>
-#[derive(Clone, Debug, PartialEq)]
-pub struct LdapDn(pub String);
-
-impl Deserialize for LdapDn {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        let string = String::deserialize(buffer)?;
-
-        // TODO: Validate string format
-
-        Ok(LdapDn(string))
-    }
-}
-
-impl Serialize for LdapDn {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        self.0.serialize(buffer);
-    }
-}
-
-type Uri = String;
 
 /// The result of an operation
 #[derive(Clone, Debug, PartialEq)]
@@ -477,427 +508,12 @@ impl Deserialize for ResultCode {
     }
 }
 
-const BIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 0);
-
-/// A Bind request providing any supplied authentication credentials
-#[derive(Clone, Debug, PartialEq)]
-pub struct BindRequest {
-    /// LDAP version -- should always be 3
-    pub version: u32,
-    /// The DN of the user
-    pub name: LdapDn,
-    /// The authentication method (Simple or SASL)
-    pub authentication: AuthenticationChoice,
-}
-
-impl Serialize for BindRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        BIND_REQUEST.serialize(buffer);
-
-        serialize_sequence(buffer, |buffer| {
-            self.version.serialize(buffer);
-            self.name.serialize(buffer);
-            self.authentication.serialize(buffer);
-        });
-    }
-}
-
-const SIMPLE: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
-const SASL: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 3);
-
-/// The authentication method in a Bind request
-#[derive(Clone, Debug, PartialEq)]
-pub enum AuthenticationChoice {
-    /// Simple, password based authentication
-    Simple(String),
-    /// SASL authentication
-    Sasl(SaslCredentials),
-}
-
-impl Serialize for AuthenticationChoice {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        match self {
-            AuthenticationChoice::Simple(s) => {
-                SIMPLE.serialize(buffer);
-                let length = Length::new(s.as_bytes().len() as u64);
-                length.serialize(buffer);
-                buffer.write(s.as_bytes());
-            }
-            AuthenticationChoice::Sasl(_) => {
-                SASL.serialize(buffer);
-                todo!("sasl support");
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct SaslCredentials {
-    pub mechanism: String,
-    pub credentials: Option<String>,
-}
-
-const BIND_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 1);
-
-/// The server response to a Bind request
-#[derive(Clone, Debug, PartialEq)]
-pub struct BindResponse {
-    /// Result of the Bind request
-    pub result: LdapResult,
-    pub server_sasl_creds: Option<String>,
-}
-
-impl Deserialize for BindResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(BIND_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-        let server_sasl_creds =
-            match buffer.peek_tag(Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 7)) {
-                Ok(_) => {
-                    buffer.byte()?;
-                    let length = Length::deserialize(buffer)?;
-                    let buffer = buffer.slice(length)?;
-                    Some(
-                        std::str::from_utf8(buffer)
-                            .map(Into::into)
-                            .map_err(|_| DeserializeError::InvalidUtf8)?,
-                    )
-                }
-                Err(DeserializeError::BufferTooShort) => None,
-                Err(DeserializeError::BadTag { .. }) => None,
-                Err(e) => return Err(e),
-            };
-
-        Ok(Self { result, server_sasl_creds })
-    }
-}
-
-const UNBIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 2);
-
-/// A termination request to gracefully end communication
-#[derive(Clone, Debug, PartialEq)]
-pub struct UnbindRequest;
-
-impl Serialize for UnbindRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        UNBIND_REQUEST.serialize(buffer);
-        Length::new(0).serialize(buffer);
-    }
-}
-
-/// A search request
-#[derive(Clone, Debug, PartialEq)]
-pub struct SearchRequest {
-    /// The base object to search
-    pub base_object: LdapDn,
-    /// The scope in which to search
-    pub scope: Scope,
-    /// Behavior when encountering aliases
-    pub deref_alias: DerefAlias,
-    /// The max number of entries to be returned, with 0 indicating no size
-    /// limit
-    pub size_limit: i32,
-    /// A time limit in seconds to process the search request
-    pub time_limit: i32,
-    /// Whether the search results contain both attribute descriptions and
-    /// values or only attribute descriptions
-    pub types_only: bool,
-    /// The filter of which to match entries with
-    pub filter: Filter,
-    ///
-    pub attributes: Vec<String>,
-}
-
-const SEARCH_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 3);
-
-impl Serialize for SearchRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        SEARCH_REQUEST.serialize(buffer);
-
-        serialize_sequence(buffer, |buffer| {
-            self.base_object.serialize(buffer);
-            self.scope.serialize(buffer);
-            self.deref_alias.serialize(buffer);
-            self.size_limit.serialize(buffer);
-            self.time_limit.serialize(buffer);
-            self.types_only.serialize(buffer);
-            self.filter.serialize(buffer);
-            self.attributes.serialize(buffer);
-        });
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(u8)]
-pub enum Scope {
-    /// The scope is constrained to the entry named by `baseObject`
-    BaseObject = 0,
-    /// The scope is constrained to the immediate subordinates of the entry
-    /// named by `baseObject`
-    SingleLevel = 1,
-    /// The scope is constrained to the entry named by `baseObject` and to all
-    /// its subordinates
-    WholeSubtree = 2,
-}
-
-impl Serialize for Scope {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        ENUMERATED.serialize(buffer);
-        Length::new(1).serialize(buffer);
-        buffer.write_byte(*self as u8)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(u8)]
-pub enum DerefAlias {
-    /// Do not dereference aliases during processing of the search
-    NeverDerefAlias = 0,
-    /// While searching subordinates of the base object, dereference any alias
-    /// within the search scope
-    DerefInSearching = 1,
-    /// Dereference aliases in locating the base object of the search, but not
-    /// when searching subordinates of the base object.
-    DerefFindingBaseObj = 2,
-    /// Dereference aliases both in searching and in locating the base object of
-    /// the search
-    DerefAlways = 3,
-}
-
-impl Serialize for DerefAlias {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        ENUMERATED.serialize(buffer);
-        Length::new(1).serialize(buffer);
-        buffer.write_byte(*self as u8)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Filter {
-    /// A combination filter where all subfilters must match to return a result
-    And(Vec<Filter>),
-    /// A combination filter where at least one subfilter must match to return a
-    /// result
-    Or(Vec<Filter>),
-    /// A combination filter where the subfilter must NOT match to return a
-    /// result
-    Not(Box<Filter>),
-    /// The provided attribute description and value match exactly to one in the
-    /// entry
-    EqualityMatch(AttributeValueAssertion),
-    /// The attribute value of the provided attribute description matches the
-    /// pattern specified
-    Substrings(SubstringFilter),
-    /// The attribute value is greater than or equal to the provided attribute
-    /// value of the provided attribute description
-    GreaterOrEqual(AttributeValueAssertion),
-    /// The attribute value is greater than or equal to the provided attribute
-    /// value of the provided attribute description
-    LessOrEqual(AttributeValueAssertion),
-    /// The attribute description exists
-    Present(AttributeDescription),
-    /// The attribute value of the provided attribute description approximately
-    /// matches the provided attribute value in some way
-    ApproximateMatch(AttributeValueAssertion),
-    ExtensibleMatch(MatchingRuleAssertion),
-}
-
-impl Serialize for Filter {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        const AND: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 0);
-        const OR: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 1);
-        const NOT: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 2);
-        const EQUALITY_MATCH: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 3);
-        const SUBSTRINGS: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 4);
-        const GREATER_OR_EQUAL: Tag =
-            Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 5);
-        const LESS_OR_EQUAL: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 6);
-        const PRESENT: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 7);
-        const APPROXIMATE_MATCH: Tag =
-            Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 8);
-        const EXTENSIBLE_MATCH: Tag =
-            Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 9);
-
-        match self {
-            Filter::And(filters) => {
-                AND.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    for filter in filters {
-                        filter.serialize(buffer);
-                    }
-                });
-            }
-            Filter::Or(filters) => {
-                OR.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    for filter in filters {
-                        filter.serialize(buffer);
-                    }
-                });
-            }
-            Filter::Not(filter) => {
-                NOT.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    filter.serialize(buffer);
-                });
-            }
-            Filter::EqualityMatch(ava) => {
-                EQUALITY_MATCH.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    ava.attribute_description.0.serialize(buffer);
-                    ava.assertion_value.serialize(buffer);
-                });
-            }
-            Filter::Substrings(substrs) => {
-                SUBSTRINGS.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    substrs.r#type.0.serialize(buffer);
-                    substrs.substrings.serialize(buffer);
-                });
-            }
-            Filter::GreaterOrEqual(ava) => {
-                GREATER_OR_EQUAL.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    ava.attribute_description.0.serialize(buffer);
-                    ava.assertion_value.serialize(buffer);
-                });
-            }
-            Filter::LessOrEqual(ava) => {
-                LESS_OR_EQUAL.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    ava.attribute_description.0.serialize(buffer);
-                    ava.assertion_value.serialize(buffer);
-                });
-            }
-            Filter::Present(ad) => {
-                PRESENT.serialize(buffer);
-                Length::new(ad.0.as_bytes().len() as u64).serialize(buffer);
-                buffer.write(ad.0.as_bytes());
-            }
-            Filter::ApproximateMatch(ava) => {
-                APPROXIMATE_MATCH.serialize(buffer);
-                serialize_sequence(buffer, |buffer| {
-                    ava.attribute_description.0.serialize(buffer);
-                    ava.assertion_value.serialize(buffer);
-                });
-            }
-            Filter::ExtensibleMatch(_) => todo!("extensible match serialization"),
-        }
-    }
-}
-
-pub type AssertionValue = String;
-
-/// A UTF-8 string that is constrained to <attributedescription>
-#[derive(Clone, Debug, PartialEq)]
-pub struct AttributeDescription(String);
-
-impl Deserialize for AttributeDescription {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        let string = String::deserialize(buffer)?;
-
-        // TODO: Validate string format
-
-        Ok(AttributeDescription(string))
-    }
-}
-
-impl Serialize for AttributeDescription {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        self.0.serialize(buffer);
-    }
-}
-
-/// A substring filter
-#[derive(Clone, Debug, PartialEq)]
-pub struct SubstringFilter {
-    /// The attribute description whose attribute value to match the substrings
-    /// on
-    pub r#type: AttributeDescription,
-    /// The substrings to match on
-    pub substrings: Vec<Substring>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Substring {
-    /// The initial value of the substring match, at most one and must be the
-    /// first element in `SubstringFilter.substrings`
-    Initial(AssertionValue),
-    /// A substring value to match on partially
-    Any(AssertionValue),
-    /// The last value of the substring match, at most one and must be the last
-    /// element in `SubstringFilter.substrings`
-    Final(AssertionValue),
-}
-
-impl Serialize for Substring {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        const INITIAL: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
-        const ANY: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 1);
-        const FINAL: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 2);
-
-        match self {
-            Substring::Initial(av) => {
-                INITIAL.serialize(buffer);
-                Length::new(av.as_bytes().len() as u64).serialize(buffer);
-                buffer.write(av.as_bytes());
-            }
-            Substring::Any(av) => {
-                ANY.serialize(buffer);
-                Length::new(av.as_bytes().len() as u64).serialize(buffer);
-                buffer.write(av.as_bytes());
-            }
-            Substring::Final(av) => {
-                FINAL.serialize(buffer);
-                Length::new(av.as_bytes().len() as u64).serialize(buffer);
-                buffer.write(av.as_bytes());
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct AttributeValueAssertion {
     /// The attribute description to match on
     pub attribute_description: AttributeDescription,
     /// The attribute value to match on
     pub assertion_value: AssertionValue,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MatchingRuleAssertion {
-    pub matching_rule: Option<String>,
-    pub r#type: Option<AttributeDescription>,
-    pub match_value: AssertionValue,
-    pub dn_attributes: bool,
-}
-
-pub type AttributeValue = String;
-
-const SEARCH_RESULT_ENTRY: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 4);
-
-/// A result from a Search operation
-#[derive(Clone, Debug, PartialEq)]
-pub struct SearchResultEntry {
-    /// The object name of this result
-    pub object_name: LdapDn,
-    /// The list of attributes for
-    pub attribute_list: Vec<PartialAttribute>,
-}
-
-impl Deserialize for SearchResultEntry {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(SEARCH_RESULT_ENTRY)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let object_name = LdapDn::deserialize(buffer)?;
-        let attribute_list = Vec::deserialize(buffer)?;
-
-        Ok(Self { object_name, attribute_list })
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -928,474 +544,6 @@ impl Serialize for PartialAttribute {
             self.r#type.serialize(buffer);
             self.vals.serialize(buffer);
         });
-    }
-}
-
-const SEARCH_RESULT_REFERENCE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 19);
-
-/// Search results that have not been visited that reside on another LDAP server
-#[derive(Clone, Debug, PartialEq)]
-pub struct SearchResultReference {
-    /// URIs of the LDAP servers with query
-    pub uris: Vec<Uri>,
-}
-
-impl Deserialize for SearchResultReference {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(SEARCH_RESULT_REFERENCE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let mut uris = Vec::new();
-        while !buffer.is_empty() {
-            uris.push(Uri::deserialize(buffer)?);
-        }
-
-        Ok(Self { uris })
-    }
-}
-
-const SEARCH_RESULT_DONE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 5);
-
-/// All search result entries have been returned
-#[derive(Clone, Debug, PartialEq)]
-pub struct SearchResultDone {
-    /// The result of the search
-    pub result: LdapResult,
-}
-
-impl Deserialize for SearchResultDone {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(SEARCH_RESULT_DONE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-
-        Ok(Self { result })
-    }
-}
-
-const MODIFY_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 6);
-
-/// Request to modify an object
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModifyRequest {
-    /// The object to modify
-    pub object: LdapDn,
-    /// Sequence of changes to apply to the object
-    pub changes: Vec<Change>,
-}
-
-impl Serialize for ModifyRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        MODIFY_REQUEST.serialize(buffer);
-        serialize_sequence(buffer, |buffer| {
-            self.object.serialize(buffer);
-            self.changes.serialize(buffer);
-        });
-    }
-}
-
-/// An individual change to make to some object
-#[derive(Clone, Debug, PartialEq)]
-pub struct Change {
-    /// The operation to perform on the object
-    pub operation: ModifyOperation,
-    /// Attributes to modify
-    pub modification: PartialAttribute,
-}
-
-impl Serialize for Change {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        SEQUENCE.serialize(buffer);
-        serialize_sequence(buffer, |buffer| {
-            self.operation.serialize(buffer);
-            self.modification.serialize(buffer);
-        });
-    }
-}
-
-/// The types of operations that can be applied to an object
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(u8)]
-pub enum ModifyOperation {
-    Add = 0,
-    Delete = 1,
-    Replace = 2,
-}
-
-impl Serialize for ModifyOperation {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        ENUMERATED.serialize(buffer);
-        Length::new(1).serialize(buffer);
-        buffer.write_byte(*self as u8);
-    }
-}
-
-const MODIFY_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 7);
-
-/// Modify operation response
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModifyResponse {
-    /// The result of the Modify operation
-    pub result: LdapResult,
-}
-
-impl Deserialize for ModifyResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(MODIFY_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-
-        Ok(Self { result })
-    }
-}
-
-const ADD_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 8);
-
-/// For all intents and purposes these types are no different from each other
-/// EXCEPT that `Attribute` MUST have at least one value inside of it
-pub type Attribute = PartialAttribute;
-
-/// Request to add an entry
-#[derive(Clone, Debug, PartialEq)]
-pub struct AddRequest {
-    /// DN of the entry to add attributes to
-    pub entry: LdapDn,
-    /// Attributes to add to the above entry
-    pub attributes: Vec<Attribute>,
-}
-
-impl Serialize for AddRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        ADD_REQUEST.serialize(buffer);
-        serialize_sequence(buffer, |buffer| {
-            self.entry.serialize(buffer);
-            self.attributes.serialize(buffer);
-        });
-    }
-}
-
-const ADD_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 9);
-
-/// Add operation response
-#[derive(Clone, Debug, PartialEq)]
-pub struct AddResponse {
-    /// The result of the Add operation
-    pub result: LdapResult,
-}
-
-impl Deserialize for AddResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(ADD_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-
-        Ok(Self { result })
-    }
-}
-
-const DELETE_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 10);
-
-/// Request to delete an object
-#[derive(Clone, Debug, PartialEq)]
-pub struct DeleteRequest {
-    /// DN of the object to be deleted
-    pub entry: LdapDn,
-}
-
-impl Serialize for DeleteRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        DELETE_REQUEST.serialize(buffer);
-        Length::new(self.entry.0.as_bytes().len() as u64).serialize(buffer);
-        buffer.write(self.entry.0.as_bytes());
-    }
-}
-
-const DELETE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 11);
-
-/// Delete operation response
-#[derive(Clone, Debug, PartialEq)]
-pub struct DeleteResponse {
-    /// The result of the Delete operation
-    pub result: LdapResult,
-}
-
-impl Deserialize for DeleteResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(DELETE_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-
-        Ok(Self { result })
-    }
-}
-
-const MODIFY_DN_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 12);
-
-/// The Modify DN operation allows a client to change the Relative Distinguished
-/// Name (RDN) of an entry in the Directory and/or to move a subtree of entries
-/// to a new location in the Directory
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModifyDnRequest {
-    /// The name of the entry to modify
-    pub entry: LdapDn,
-    /// The new Relative DN of the entry
-    pub new_rdn: LdapRelativeDn,
-    /// Whether the old Relative DN attribute values are to be retained as
-    /// attributes of the entry or deleted
-    pub delete_old_rdn: bool,
-    /// The name of an existing object entry that becomes the parent of the
-    /// existing entry, if supplied
-    pub new_superior: Option<LdapDn>,
-}
-
-impl Serialize for ModifyDnRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        const NEW_SUPERIOR: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
-
-        MODIFY_DN_REQUEST.serialize(buffer);
-        serialize_sequence(buffer, |buffer| {
-            self.entry.serialize(buffer);
-            self.new_rdn.0.serialize(buffer);
-            self.delete_old_rdn.serialize(buffer);
-
-            if let Some(new_superior) = &self.new_superior {
-                NEW_SUPERIOR.serialize(buffer);
-                Length::new(new_superior.0.as_bytes().len() as u64).serialize(buffer);
-                buffer.write(new_superior.0.as_bytes());
-            }
-        });
-    }
-}
-
-const MODIFY_DN_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 13);
-
-/// Modify DN operation response
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModifyDnResponse {
-    /// The result of the Modify DN operation
-    pub result: LdapResult,
-}
-
-impl Deserialize for ModifyDnResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(MODIFY_DN_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-
-        Ok(Self { result })
-    }
-}
-
-const COMPARE_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 14);
-
-/// Compare an attribute description and value with a specific entry
-#[derive(Clone, Debug, PartialEq)]
-pub struct CompareRequest {
-    /// Entry to compare to
-    pub entry: LdapDn,
-    /// Attribute description and value pair
-    pub attribute_value_assertion: AttributeValueAssertion,
-}
-
-impl Serialize for CompareRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        COMPARE_REQUEST.serialize(buffer);
-        serialize_sequence(buffer, |buffer| {
-            self.entry.serialize(buffer);
-
-            SEQUENCE.serialize(buffer);
-            serialize_sequence(buffer, |buffer| {
-                self.attribute_value_assertion.attribute_description.serialize(buffer);
-                self.attribute_value_assertion.assertion_value.serialize(buffer);
-            });
-        });
-    }
-}
-
-const COMPARE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 15);
-
-/// Compare operation response
-#[derive(Clone, Debug, PartialEq)]
-pub struct CompareResponse {
-    /// The result of the Compare operation
-    pub result: LdapResult,
-}
-
-impl Deserialize for CompareResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(COMPARE_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-
-        Ok(Self { result })
-    }
-}
-
-const ABANDON_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 16);
-
-/// Request the server abandon a previously sent request
-#[derive(Clone, Debug, PartialEq)]
-pub struct AbandonRequest {
-    /// Message ID to abandon
-    pub message_id: i32,
-}
-
-impl Serialize for AbandonRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        ABANDON_REQUEST.serialize(buffer);
-        serialize_sequence(buffer, |buffer| {
-            self.message_id.serialize(buffer);
-        });
-    }
-}
-
-const EXTENDED_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 23);
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ExtendedRequest {
-    pub request_name: LdapOid,
-    pub request_value: Option<String>,
-}
-
-impl Serialize for ExtendedRequest {
-    fn serialize(&self, buffer: &mut dyn VecExt) {
-        const REQUEST_NAME: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
-        const REQUEST_VALUE: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 1);
-
-        EXTENDED_REQUEST.serialize(buffer);
-        serialize_sequence(buffer, |buffer| {
-            REQUEST_NAME.serialize(buffer);
-            Length::new(self.request_name.0.as_bytes().len() as u64).serialize(buffer);
-            buffer.write(self.request_name.0.as_bytes());
-
-            if let Some(request_value) = &self.request_value {
-                REQUEST_VALUE.serialize(buffer);
-                Length::new(request_value.as_bytes().len() as u64).serialize(buffer);
-                buffer.write(request_value.as_bytes());
-            }
-        });
-    }
-}
-
-const EXTENDED_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 24);
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ExtendedResponse {
-    pub result: LdapResult,
-    pub response_name: Option<LdapOid>,
-    pub response_value: Option<String>,
-}
-
-impl Deserialize for ExtendedResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        const REQUEST_NAME: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 10);
-        const REQUEST_VALUE: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 11);
-
-        buffer.tag(EXTENDED_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
-
-        let response_name = match buffer.peek_tag(REQUEST_NAME) {
-            Ok(_) => {
-                buffer.byte()?;
-                let length = Length::deserialize(buffer)?;
-
-                Some(LdapOid(
-                    std::str::from_utf8(buffer.slice(length)?)
-                        .map(Into::into)
-                        .map_err(|_| DeserializeError::InvalidUtf8)?,
-                ))
-            }
-            Err(DeserializeError::BufferTooShort) => None,
-            Err(DeserializeError::BadTag { .. }) => None,
-            Err(e) => return Err(e),
-        };
-
-        let response_value = match buffer.peek_tag(REQUEST_VALUE) {
-            Ok(_) => {
-                buffer.byte()?;
-                let length = Length::deserialize(buffer)?;
-
-                Some(
-                    std::str::from_utf8(buffer.slice(length)?)
-                        .map(Into::into)
-                        .map_err(|_| DeserializeError::InvalidUtf8)?,
-                )
-            }
-            Err(DeserializeError::BufferTooShort) => None,
-            Err(DeserializeError::BadTag { .. }) => None,
-            Err(e) => return Err(e),
-        };
-
-        Ok(Self { result, response_name, response_value })
-    }
-}
-
-const INTERMEDIATE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 25);
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct IntermediateResponse {
-    pub response_name: Option<LdapOid>,
-    pub response_value: Option<String>,
-}
-
-impl Deserialize for IntermediateResponse {
-    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        const REQUEST_NAME: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
-        const REQUEST_VALUE: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 1);
-
-        buffer.tag(INTERMEDIATE_RESPONSE)?;
-        let length = Length::deserialize(buffer)?;
-        let buffer = &mut buffer.slice(length)?;
-
-        let response_name = match buffer.peek_tag(REQUEST_NAME) {
-            Ok(_) => {
-                buffer.byte()?;
-                let length = Length::deserialize(buffer)?;
-
-                Some(LdapOid(
-                    std::str::from_utf8(buffer.slice(length)?)
-                        .map(Into::into)
-                        .map_err(|_| DeserializeError::InvalidUtf8)?,
-                ))
-            }
-            Err(DeserializeError::BufferTooShort) => None,
-            Err(DeserializeError::BadTag { .. }) => None,
-            Err(e) => return Err(e),
-        };
-
-        let response_value = match buffer.peek_tag(REQUEST_VALUE) {
-            Ok(_) => {
-                buffer.byte()?;
-                let length = Length::deserialize(buffer)?;
-
-                Some(
-                    std::str::from_utf8(buffer.slice(length)?)
-                        .map(Into::into)
-                        .map_err(|_| DeserializeError::InvalidUtf8)?,
-                )
-            }
-            Err(DeserializeError::BufferTooShort) => None,
-            Err(DeserializeError::BadTag { .. }) => None,
-            Err(e) => return Err(e),
-        };
-
-        Ok(Self { response_name, response_value })
     }
 }
 

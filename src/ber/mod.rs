@@ -131,9 +131,9 @@ impl Deserialize for Length {
 impl Serialize for Length {
     fn serialize(&self, buffer: &mut dyn VecExt) {
         if self.0 > 127 {
-            buffer.write_byte(0x88);
             let ns = self.0.to_be_bytes();
             let start = ns.iter().copied().position(|n| n != 0).unwrap_or(7);
+            buffer.write_byte(0x80 | (8 - start as u8));
             buffer.write(&ns[start..]);
         } else {
             buffer.write_byte(self.0 as u8);

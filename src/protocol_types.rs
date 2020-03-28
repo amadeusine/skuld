@@ -60,6 +60,12 @@ pub enum ProtocolOperation {
     SearchResultEntry(SearchResultEntry),
     SearchResultDone(SearchResultDone),
     SearchResultReference(SearchResultReference),
+    ModifyRequest(ModifyRequest),
+    ModifyResponse(ModifyResponse),
+    AddRequest(AddRequest),
+    AddResponse(AddResponse),
+    DeleteRequest(DeleteRequest),
+    DeleteResponse(DeleteResponse),
 }
 
 impl Serialize for ProtocolOperation {
@@ -77,6 +83,18 @@ impl Serialize for ProtocolOperation {
             }
             ProtocolOperation::SearchResultReference(_) => {
                 unreachable!("we don't serialize search result references")
+            }
+            ProtocolOperation::ModifyRequest(mr) => mr.serialize(buffer),
+            ProtocolOperation::ModifyResponse(_) => {
+                unreachable!("we don't serialize search modify responses")
+            }
+            ProtocolOperation::AddRequest(ar) => ar.serialize(buffer),
+            ProtocolOperation::AddResponse(_) => {
+                unreachable!("we don't serialize search add responses")
+            }
+            ProtocolOperation::DeleteRequest(dr) => dr.serialize(buffer),
+            ProtocolOperation::DeleteResponse(_) => {
+                unreachable!("we don't serialize search delete responses")
             }
         }
     }
@@ -98,6 +116,12 @@ impl Deserialize for ProtocolOperation {
             SEARCH_RESULT_REFERENCE => {
                 Ok(Self::SearchResultReference(SearchResultReference::deserialize(buffer)?))
             }
+            MODIFY_REQUEST => unreachable!("we don't deserialize modify requests"),
+            MODIFY_RESPONSE => Ok(Self::ModifyResponse(ModifyResponse::deserialize(buffer)?)),
+            ADD_REQUEST => unreachable!("we don't deserialize add requests"),
+            ADD_RESPONSE => Ok(Self::AddResponse(AddResponse::deserialize(buffer)?)),
+            DELETE_REQUEST => unreachable!("we don't deserialize delete requests"),
+            DELETE_RESPONSE => Ok(Self::DeleteResponse(DeleteResponse::deserialize(buffer)?)),
             _ => Err(DeserializeError::InvalidValue),
         }
     }
@@ -858,6 +882,16 @@ impl Deserialize for PartialAttribute {
     }
 }
 
+impl Serialize for PartialAttribute {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        SEQUENCE.serialize(buffer);
+        serialize_sequence(buffer, |buffer| {
+            self.r#type.serialize(buffer);
+            self.vals.serialize(buffer);
+        });
+    }
+}
+
 const SEARCH_RESULT_REFERENCE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 19);
 
 /// Search results that have not been visited that reside on another LDAP server
@@ -894,6 +928,168 @@ pub struct SearchResultDone {
 impl Deserialize for SearchResultDone {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
         buffer.tag(SEARCH_RESULT_DONE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
+
+        Ok(Self { result })
+    }
+}
+
+const MODIFY_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 6);
+
+/// Request to modify an object
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModifyRequest {
+    /// The object to modify
+    pub object: LdapDn,
+    /// Sequence of changes to apply to the object
+    pub changes: Vec<Change>,
+}
+
+impl Serialize for ModifyRequest {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        MODIFY_REQUEST.serialize(buffer);
+        serialize_sequence(buffer, |buffer| {
+            self.object.serialize(buffer);
+            self.changes.serialize(buffer);
+        });
+    }
+}
+
+/// An individual change to make to some object
+#[derive(Clone, Debug, PartialEq)]
+pub struct Change {
+    /// The operation to perform on the object
+    pub operation: ModifyOperation,
+    /// Attributes to modify
+    pub modification: PartialAttribute,
+}
+
+impl Serialize for Change {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        SEQUENCE.serialize(buffer);
+        serialize_sequence(buffer, |buffer| {
+            self.operation.serialize(buffer);
+            self.modification.serialize(buffer);
+        });
+    }
+}
+
+/// The types of operations that can be applied to an object
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(u8)]
+pub enum ModifyOperation {
+    Add = 0,
+    Delete = 1,
+    Replace = 2,
+}
+
+impl Serialize for ModifyOperation {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        ENUMERATED.serialize(buffer);
+        Length::new(1).serialize(buffer);
+        buffer.write_byte(*self as u8);
+    }
+}
+
+const MODIFY_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 7);
+
+/// Modify operation response
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModifyResponse {
+    /// The result of the Modify operation
+    pub result: LdapResult,
+}
+
+impl Deserialize for ModifyResponse {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(MODIFY_RESPONSE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
+
+        Ok(Self { result })
+    }
+}
+
+const ADD_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 8);
+
+/// For all intents and purposes these types are no different from each other
+/// EXCEPT that `Attribute` MUST have at least one value inside of it
+pub type Attribute = PartialAttribute;
+
+/// Request to add an entry
+#[derive(Clone, Debug, PartialEq)]
+pub struct AddRequest {
+    /// DN of the entry to add attributes to
+    pub entry: LdapDn,
+    /// Attributes to add to the above entry
+    pub attributes: Vec<Attribute>,
+}
+
+impl Serialize for AddRequest {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        ADD_REQUEST.serialize(buffer);
+        serialize_sequence(buffer, |buffer| {
+            self.entry.serialize(buffer);
+            self.attributes.serialize(buffer);
+        });
+    }
+}
+
+const ADD_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 9);
+
+/// Add operation response
+#[derive(Clone, Debug, PartialEq)]
+pub struct AddResponse {
+    /// The result of the Add operation
+    pub result: LdapResult,
+}
+
+impl Deserialize for AddResponse {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(ADD_RESPONSE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
+
+        Ok(Self { result })
+    }
+}
+
+const DELETE_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 10);
+
+/// Request to delete an object
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeleteRequest {
+    /// DN of the object to be deleted
+    pub entry: LdapDn,
+}
+
+impl Serialize for DeleteRequest {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        DELETE_REQUEST.serialize(buffer);
+        Length::new(self.entry.0.as_bytes().len() as u64).serialize(buffer);
+        buffer.write(self.entry.0.as_bytes());
+    }
+}
+
+const DELETE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 11);
+
+/// Delete operation response
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeleteResponse {
+    /// The result of the Delete operation
+    pub result: LdapResult,
+}
+
+impl Deserialize for DeleteResponse {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(DELETE_RESPONSE)?;
         let length = Length::deserialize(buffer)?;
         let buffer = &mut buffer.slice(length)?;
 
@@ -1076,6 +1272,191 @@ mod tests {
                         result_code: ResultCode::NoSuchObject,
                         matched_dn: LdapDn(s!()),
                         diagnostic_message: s!(),
+                        referral: None,
+                    }
+                }),
+                controls: None,
+            })
+        );
+    }
+
+    #[test]
+    fn modify_request() {
+        let packet = &[
+            0x30, 0x81, 0x8a, 0x02, 0x01, 0x02, 0x66, 0x81, 0x84, 0x04, 0x1a, 0x63, 0x6e, 0x3d,
+            0x61, 0x64, 0x6d, 0x69, 0x6e, 0x2c, 0x64, 0x63, 0x3d, 0x65, 0x78, 0x61, 0x6d, 0x70,
+            0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x63, 0x6f, 0x6d, 0x30, 0x66, 0x30, 0x31, 0x0a,
+            0x01, 0x02, 0x30, 0x2c, 0x04, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74,
+            0x69, 0x6f, 0x6e, 0x31, 0x1d, 0x04, 0x1b, 0x4d, 0x6f, 0x64, 0x69, 0x66, 0x69, 0x65,
+            0x64, 0x20, 0x4c, 0x44, 0x41, 0x50, 0x20, 0x61, 0x64, 0x6d, 0x69, 0x6e, 0x69, 0x73,
+            0x74, 0x72, 0x61, 0x74, 0x6f, 0x72, 0x30, 0x10, 0x0a, 0x01, 0x00, 0x30, 0x0b, 0x04,
+            0x04, 0x68, 0x65, 0x63, 0x63, 0x31, 0x03, 0x04, 0x01, 0x75, 0x30, 0x11, 0x0a, 0x01,
+            0x00, 0x30, 0x0c, 0x04, 0x03, 0x6e, 0x6f, 0x75, 0x31, 0x05, 0x04, 0x03, 0x79, 0x65,
+            0x73, 0x30, 0x0c, 0x0a, 0x01, 0x01, 0x30, 0x07, 0x04, 0x03, 0x6e, 0x6f, 0x75, 0x31,
+            0x00,
+        ];
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::ModifyRequest(ModifyRequest {
+                object: LdapDn(s!("cn=admin,dc=example,dc=com")),
+                changes: vec![
+                    Change {
+                        operation: ModifyOperation::Replace,
+                        modification: PartialAttribute {
+                            r#type: AttributeDescription(s!("description")),
+                            vals: Set::from(vec![s!("Modified LDAP administrator")]),
+                        },
+                    },
+                    Change {
+                        operation: ModifyOperation::Add,
+                        modification: PartialAttribute {
+                            r#type: AttributeDescription(s!("hecc")),
+                            vals: Set::from(vec![s!("u")]),
+                        },
+                    },
+                    Change {
+                        operation: ModifyOperation::Add,
+                        modification: PartialAttribute {
+                            r#type: AttributeDescription(s!("nou")),
+                            vals: Set::from(vec![s!("yes")]),
+                        },
+                    },
+                    Change {
+                        operation: ModifyOperation::Delete,
+                        modification: PartialAttribute {
+                            r#type: AttributeDescription(s!("nou")),
+                            vals: Set::from(vec![]),
+                        },
+                    },
+                ],
+            }),
+            controls: None,
+        };
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+
+        assert_eq!(buffer, &packet[..]);
+    }
+
+    #[test]
+    fn modify_response() {
+        let message = &[
+            0x30, 0x2a, 0x02, 0x01, 0x02, 0x67, 0x25, 0x0a, 0x01, 0x11, 0x04, 0x00, 0x04, 0x1e,
+            0x68, 0x65, 0x63, 0x63, 0x3a, 0x20, 0x61, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74,
+            0x65, 0x20, 0x74, 0x79, 0x70, 0x65, 0x20, 0x75, 0x6e, 0x64, 0x65, 0x66, 0x69, 0x6e,
+            0x65, 0x64,
+        ];
+
+        assert_eq!(
+            LdapMessage::deserialize(&mut &message[..]),
+            Ok(LdapMessage {
+                message_id: 2,
+                protocol_operation: ProtocolOperation::ModifyResponse(ModifyResponse {
+                    result: LdapResult {
+                        result_code: ResultCode::UndefinedAttributeType,
+                        matched_dn: LdapDn(s!()),
+                        diagnostic_message: s!("hecc: attribute type undefined"),
+                        referral: None,
+                    }
+                }),
+                controls: None,
+            })
+        )
+    }
+
+    #[test]
+    fn add_request() {
+        let packet = &[
+            0x30, 0x31, 0x02, 0x01, 0x02, 0x68, 0x2c, 0x04, 0x1a, 0x63, 0x6e, 0x3d, 0x61, 0x64,
+            0x6d, 0x69, 0x6e, 0x2c, 0x64, 0x63, 0x3d, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65,
+            0x2c, 0x64, 0x63, 0x3d, 0x63, 0x6f, 0x6d, 0x30, 0x0e, 0x30, 0x0c, 0x04, 0x03, 0x6e,
+            0x6f, 0x75, 0x31, 0x05, 0x04, 0x03, 0x79, 0x65, 0x73,
+        ];
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::AddRequest(AddRequest {
+                entry: LdapDn(s!("cn=admin,dc=example,dc=com")),
+                attributes: vec![Attribute {
+                    r#type: AttributeDescription(s!("nou")),
+                    vals: Set::from(vec![s!("yes")]),
+                }],
+            }),
+            controls: None,
+        };
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+
+        assert_eq!(buffer, &packet[..]);
+    }
+
+    #[test]
+    fn add_response() {
+        let message = &[
+            0x30, 0x29, 0x02, 0x01, 0x02, 0x69, 0x24, 0x0a, 0x01, 0x11, 0x04, 0x00, 0x04, 0x1d,
+            0x6e, 0x6f, 0x75, 0x3a, 0x20, 0x61, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65,
+            0x20, 0x74, 0x79, 0x70, 0x65, 0x20, 0x75, 0x6e, 0x64, 0x65, 0x66, 0x69, 0x6e, 0x65,
+            0x64,
+        ];
+
+        assert_eq!(
+            LdapMessage::deserialize(&mut &message[..]),
+            Ok(LdapMessage {
+                message_id: 2,
+                protocol_operation: ProtocolOperation::AddResponse(AddResponse {
+                    result: LdapResult {
+                        result_code: ResultCode::UndefinedAttributeType,
+                        matched_dn: LdapDn(s!()),
+                        diagnostic_message: s!("nou: attribute type undefined"),
+                        referral: None,
+                    }
+                }),
+                controls: None,
+            })
+        );
+    }
+
+    #[test]
+    fn delete_request() {
+        let packet = &[
+            0x30, 0x22, 0x02, 0x01, 0x02, 0x4a, 0x1d, 0x63, 0x6e, 0x3d, 0x73, 0x6f, 0x6d, 0x65,
+            0x75, 0x73, 0x65, 0x72, 0x2c, 0x64, 0x63, 0x3d, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c,
+            0x65, 0x2c, 0x64, 0x63, 0x3d, 0x63, 0x6f, 0x6d,
+        ];
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::DeleteRequest(DeleteRequest {
+                entry: LdapDn(s!("cn=someuser,dc=example,dc=com")),
+            }),
+            controls: None,
+        };
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+
+        assert_eq!(buffer, &packet[..]);
+    }
+
+    #[test]
+    fn delete_response() {
+        let message = &[
+            0x30, 0x28, 0x02, 0x01, 0x02, 0x6b, 0x23, 0x0a, 0x01, 0x35, 0x04, 0x00, 0x04, 0x1c,
+            0x6e, 0x6f, 0x20, 0x67, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x20, 0x73, 0x75, 0x70, 0x65,
+            0x72, 0x69, 0x6f, 0x72, 0x20, 0x6b, 0x6e, 0x6f, 0x77, 0x6c, 0x65, 0x64, 0x67, 0x65,
+        ];
+
+        assert_eq!(
+            LdapMessage::deserialize(&mut &message[..]),
+            Ok(LdapMessage {
+                message_id: 2,
+                protocol_operation: ProtocolOperation::DeleteResponse(DeleteResponse {
+                    result: LdapResult {
+                        result_code: ResultCode::UnwillingToPerform,
+                        matched_dn: LdapDn(s!()),
+                        diagnostic_message: s!("no global superior knowledge"),
                         referral: None,
                     }
                 }),

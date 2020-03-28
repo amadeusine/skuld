@@ -1,10 +1,10 @@
 use crate::ber::{
     util::{serialize_sequence, ReadExt, VecExt},
-    Aspect, Class, Deserialize, DeserializeError, Length, Serialize, Tag, ENUMERATED_TAG,
-    SEQUENCE_TAG,
+    Aspect, Class, Deserialize, DeserializeError, Length, Serialize, Set, Tag, ENUMERATED,
+    SEQUENCE,
 };
 
-const CONTROLS_TAG: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 0);
+const CONTROLS: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 0);
 
 /// The main packet type of the protocol
 #[derive(Clone, Debug, PartialEq)]
@@ -19,7 +19,7 @@ pub struct LdapMessage {
 
 impl Serialize for LdapMessage {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        SEQUENCE_TAG.serialize(buffer);
+        SEQUENCE.serialize(buffer);
 
         serialize_sequence(buffer, |buffer| {
             self.message_id.serialize(buffer);
@@ -34,13 +34,13 @@ impl Serialize for LdapMessage {
 
 impl Deserialize for LdapMessage {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(SEQUENCE_TAG)?;
+        buffer.tag(SEQUENCE)?;
         let length = Length::deserialize(buffer)?;
         let buffer = &mut buffer.slice(length)?;
 
         let message_id = i32::deserialize(buffer)?;
         let protocol_operation = ProtocolOperation::deserialize(buffer)?;
-        let controls = match buffer.peek_tag(CONTROLS_TAG) {
+        let controls = match buffer.peek_tag(CONTROLS) {
             Ok(_) => todo!("controls deserialization"),
             Err(DeserializeError::BadTag { .. }) => None,
             Err(DeserializeError::BufferTooShort) => None,
@@ -57,6 +57,9 @@ pub enum ProtocolOperation {
     BindResponse(BindResponse),
     UnbindRequest(UnbindRequest),
     SearchRequest(SearchRequest),
+    SearchResultEntry(SearchResultEntry),
+    SearchResultDone(SearchResultDone),
+    SearchResultReference(SearchResultReference),
 }
 
 impl Serialize for ProtocolOperation {
@@ -66,6 +69,15 @@ impl Serialize for ProtocolOperation {
             ProtocolOperation::BindResponse(_) => unreachable!("we don't serialize bind responses"),
             ProtocolOperation::UnbindRequest(ubr) => ubr.serialize(buffer),
             ProtocolOperation::SearchRequest(sr) => sr.serialize(buffer),
+            ProtocolOperation::SearchResultEntry(_) => {
+                unreachable!("we don't serialize search result entries")
+            }
+            ProtocolOperation::SearchResultDone(_) => {
+                unreachable!("we don't serialize search result dones")
+            }
+            ProtocolOperation::SearchResultReference(_) => {
+                unreachable!("we don't serialize search result references")
+            }
         }
     }
 }
@@ -73,9 +85,19 @@ impl Serialize for ProtocolOperation {
 impl Deserialize for ProtocolOperation {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
         match Tag::new(buffer.peek()?) {
-            BIND_REQUEST_TAG => unreachable!("we don't deserialize bind requests"),
-            BIND_RESPONSE_TAG => Ok(Self::BindResponse(BindResponse::deserialize(buffer)?)),
-            UNBIND_REQUEST_TAG => unreachable!("we don't deserialize unbind requests"),
+            BIND_REQUEST => unreachable!("we don't deserialize bind requests"),
+            BIND_RESPONSE => Ok(Self::BindResponse(BindResponse::deserialize(buffer)?)),
+            UNBIND_REQUEST => unreachable!("we don't deserialize unbind requests"),
+            SEARCH_REQUEST => unreachable!("we don't deserialize search requests"),
+            SEARCH_RESULT_ENTRY => {
+                Ok(Self::SearchResultEntry(SearchResultEntry::deserialize(buffer)?))
+            }
+            SEARCH_RESULT_DONE => {
+                Ok(Self::SearchResultDone(SearchResultDone::deserialize(buffer)?))
+            }
+            SEARCH_RESULT_REFERENCE => {
+                Ok(Self::SearchResultReference(SearchResultReference::deserialize(buffer)?))
+            }
             _ => Err(DeserializeError::InvalidValue),
         }
     }
@@ -170,7 +192,7 @@ pub struct LdapResult {
 
 impl Deserialize for LdapResult {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(SEQUENCE_TAG)?;
+        buffer.tag(SEQUENCE)?;
         let result_code = ResultCode::deserialize(buffer)?;
         let matched_dn = LdapDn::deserialize(buffer)?;
         let diagnostic_message = String::deserialize(buffer)?;
@@ -343,7 +365,7 @@ pub enum ResultCode {
 
 impl Deserialize for ResultCode {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(ENUMERATED_TAG)?;
+        buffer.tag(ENUMERATED)?;
         let length = Length::deserialize(buffer)?;
         let n = buffer.uint(length)?;
 
@@ -392,7 +414,7 @@ impl Deserialize for ResultCode {
     }
 }
 
-const BIND_REQUEST_TAG: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 0);
+const BIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 0);
 
 /// A Bind request providing any supplied authentication credentials
 #[derive(Clone, Debug, PartialEq)]
@@ -407,7 +429,7 @@ pub struct BindRequest {
 
 impl Serialize for BindRequest {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        BIND_REQUEST_TAG.serialize(buffer);
+        BIND_REQUEST.serialize(buffer);
 
         serialize_sequence(buffer, |buffer| {
             self.version.serialize(buffer);
@@ -417,8 +439,8 @@ impl Serialize for BindRequest {
     }
 }
 
-const SIMPLE_TAG: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
-const SASL_TAG: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 3);
+const SIMPLE: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
+const SASL: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 3);
 
 /// The authentication method in a Bind request
 #[derive(Clone, Debug, PartialEq)]
@@ -433,13 +455,13 @@ impl Serialize for AuthenticationChoice {
     fn serialize(&self, buffer: &mut dyn VecExt) {
         match self {
             AuthenticationChoice::Simple(s) => {
-                SIMPLE_TAG.serialize(buffer);
+                SIMPLE.serialize(buffer);
                 let length = Length::new(s.as_bytes().len() as u64);
                 length.serialize(buffer);
                 buffer.write(s.as_bytes());
             }
             AuthenticationChoice::Sasl(_) => {
-                SASL_TAG.serialize(buffer);
+                SASL.serialize(buffer);
                 todo!("sasl support");
             }
         }
@@ -452,7 +474,7 @@ pub struct SaslCredentials {
     pub credentials: Option<String>,
 }
 
-const BIND_RESPONSE_TAG: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 1);
+const BIND_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 1);
 
 /// The server response to a Bind request
 #[derive(Clone, Debug, PartialEq)]
@@ -464,18 +486,18 @@ pub struct BindResponse {
 
 impl Deserialize for BindResponse {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(BIND_RESPONSE_TAG)?;
+        buffer.tag(BIND_RESPONSE)?;
         let length = Length::deserialize(buffer)?;
-        let mut slice = buffer.slice(length)?;
-        let result = ComponentsOfLdapResult::deserialize(&mut slice)?.into_inner();
+        let buffer = &mut buffer.slice(length)?;
+        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
         let server_sasl_creds =
             match buffer.peek_tag(Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 7)) {
                 Ok(_) => {
                     buffer.byte()?;
                     let length = Length::deserialize(buffer)?;
-                    let slice = buffer.slice(length)?;
+                    let buffer = buffer.slice(length)?;
                     Some(
-                        std::str::from_utf8(slice)
+                        std::str::from_utf8(buffer)
                             .map(Into::into)
                             .map_err(|_| DeserializeError::InvalidUtf8)?,
                     )
@@ -489,7 +511,7 @@ impl Deserialize for BindResponse {
     }
 }
 
-const UNBIND_REQUEST_TAG: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 2);
+const UNBIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 2);
 
 /// A termination request to gracefully end communication
 #[derive(Clone, Debug, PartialEq)]
@@ -497,7 +519,7 @@ pub struct UnbindRequest;
 
 impl Serialize for UnbindRequest {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        UNBIND_REQUEST_TAG.serialize(buffer);
+        UNBIND_REQUEST.serialize(buffer);
         Length::new(0).serialize(buffer);
     }
 }
@@ -525,11 +547,11 @@ pub struct SearchRequest {
     pub attributes: Vec<String>,
 }
 
-const SEARCH_REQUEST_TAG: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 3);
+const SEARCH_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 3);
 
 impl Serialize for SearchRequest {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        SEARCH_REQUEST_TAG.serialize(buffer);
+        SEARCH_REQUEST.serialize(buffer);
 
         serialize_sequence(buffer, |buffer| {
             self.base_object.serialize(buffer);
@@ -559,7 +581,7 @@ pub enum Scope {
 
 impl Serialize for Scope {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        ENUMERATED_TAG.serialize(buffer);
+        ENUMERATED.serialize(buffer);
         Length::new(1).serialize(buffer);
         buffer.write_byte(*self as u8)
     }
@@ -583,7 +605,7 @@ pub enum DerefAlias {
 
 impl Serialize for DerefAlias {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        ENUMERATED_TAG.serialize(buffer);
+        ENUMERATED.serialize(buffer);
         Length::new(1).serialize(buffer);
         buffer.write_byte(*self as u8)
     }
@@ -709,6 +731,22 @@ pub type AssertionValue = String;
 #[derive(Clone, Debug, PartialEq)]
 pub struct AttributeDescription(String);
 
+impl Deserialize for AttributeDescription {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        let string = String::deserialize(buffer)?;
+
+        // TODO: Validate string format
+
+        Ok(AttributeDescription(string))
+    }
+}
+
+impl Serialize for AttributeDescription {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        self.0.serialize(buffer);
+    }
+}
+
 /// A substring filter
 #[derive(Clone, Debug, PartialEq)]
 pub struct SubstringFilter {
@@ -773,6 +811,98 @@ pub struct MatchingRuleAssertion {
     pub dn_attributes: bool,
 }
 
+pub type AttributeValue = String;
+
+const SEARCH_RESULT_ENTRY: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 4);
+
+/// A result from a Search operation
+#[derive(Clone, Debug, PartialEq)]
+pub struct SearchResultEntry {
+    /// The object name of this result
+    pub object_name: LdapDn,
+    /// The list of attributes for
+    pub attribute_list: Vec<PartialAttribute>,
+}
+
+impl Deserialize for SearchResultEntry {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(SEARCH_RESULT_ENTRY)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let object_name = LdapDn::deserialize(buffer)?;
+        let attribute_list = Vec::deserialize(buffer)?;
+
+        Ok(Self { object_name, attribute_list })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartialAttribute {
+    /// The attribute description
+    pub r#type: AttributeDescription,
+    /// Zero or more attribute values associated with the attribute description
+    pub vals: Set<AttributeValue>,
+}
+
+impl Deserialize for PartialAttribute {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(SEQUENCE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let r#type = AttributeDescription::deserialize(buffer)?;
+        let vals = Set::deserialize(buffer)?;
+
+        Ok(Self { r#type, vals })
+    }
+}
+
+const SEARCH_RESULT_REFERENCE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 19);
+
+/// Search results that have not been visited that reside on another LDAP server
+#[derive(Clone, Debug, PartialEq)]
+pub struct SearchResultReference {
+    /// URIs of the LDAP servers with query
+    pub uris: Vec<Uri>,
+}
+
+impl Deserialize for SearchResultReference {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(SEARCH_RESULT_REFERENCE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let mut uris = Vec::new();
+        while !buffer.is_empty() {
+            uris.push(Uri::deserialize(buffer)?);
+        }
+
+        Ok(Self { uris })
+    }
+}
+
+const SEARCH_RESULT_DONE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 5);
+
+/// All search result entries have been returned
+#[derive(Clone, Debug, PartialEq)]
+pub struct SearchResultDone {
+    /// The result of the search
+    pub result: LdapResult,
+}
+
+impl Deserialize for SearchResultDone {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(SEARCH_RESULT_DONE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
+
+        Ok(Self { result })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -803,14 +933,11 @@ mod tests {
         let mut buffer = Vec::new();
         ldap_message.serialize(&mut buffer);
 
-        #[rustfmt::skip]
         assert_eq!(
             buffer,
             &[
-                0x30, 0x17, 0x02, 0x01, 0x01, 0x60,
-                0x12, 0x02, 0x01, 0x03, 0x04, 0x07,
-                b'c', b'n', b'=', b'h', b'e', b'c', b'c', 0x80,
-                0x04, b'n', b'o', b' ', b'u',
+                0x30, 0x17, 0x02, 0x01, 0x01, 0x60, 0x12, 0x02, 0x01, 0x03, 0x04, 0x07, b'c', b'n',
+                b'=', b'h', b'e', b'c', b'c', 0x80, 0x04, b'n', b'o', b' ', b'u',
             ]
         );
     }
@@ -895,5 +1022,65 @@ mod tests {
         let mut buffer = Vec::new();
         message.serialize(&mut buffer);
         assert_eq!(buffer, &encoded[..]);
+    }
+
+    #[test]
+    fn search_result_entry() {
+        let message = &[
+            0x30, 0x6e, 0x02, 0x01, 0x02, 0x64, 0x69, 0x04, 0x11, 0x64, 0x63, 0x3d, 0x65, 0x78,
+            0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x6f, 0x72, 0x67, 0x30, 0x54,
+            0x30, 0x2c, 0x04, 0x0b, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x43, 0x6c, 0x61, 0x73,
+            0x73, 0x31, 0x1d, 0x04, 0x03, 0x74, 0x6f, 0x70, 0x04, 0x08, 0x64, 0x63, 0x4f, 0x62,
+            0x6a, 0x65, 0x63, 0x74, 0x04, 0x0c, 0x6f, 0x72, 0x67, 0x61, 0x6e, 0x69, 0x7a, 0x61,
+            0x74, 0x69, 0x6f, 0x6e, 0x30, 0x13, 0x04, 0x01, 0x6f, 0x31, 0x0e, 0x04, 0x0c, 0x45,
+            0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x20, 0x49, 0x6e, 0x63, 0x2e, 0x30, 0x0f, 0x04,
+            0x02, 0x64, 0x63, 0x31, 0x09, 0x04, 0x07, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65,
+        ];
+
+        assert_eq!(
+            LdapMessage::deserialize(&mut &message[..]),
+            Ok(LdapMessage {
+                message_id: 2,
+                protocol_operation: ProtocolOperation::SearchResultEntry(SearchResultEntry {
+                    object_name: LdapDn(s!("dc=example,dc=org")),
+                    attribute_list: vec![
+                        PartialAttribute {
+                            r#type: AttributeDescription(s!("objectClass")),
+                            vals: Set::from(vec![s!("top"), s!("dcObject"), s!("organization"),]),
+                        },
+                        PartialAttribute {
+                            r#type: AttributeDescription(s!("o")),
+                            vals: Set::from(vec![s!("Example Inc.")]),
+                        },
+                        PartialAttribute {
+                            r#type: AttributeDescription(s!("dc")),
+                            vals: Set::from(vec![s!("example")]),
+                        }
+                    ],
+                }),
+                controls: None,
+            })
+        )
+    }
+
+    #[test]
+    fn search_result_done() {
+        let message = b"\x30\x0c\x02\x01\x02\x65\x07\x0a\x01\x20\x04\x00\x04\x00";
+
+        assert_eq!(
+            LdapMessage::deserialize(&mut &message[..]),
+            Ok(LdapMessage {
+                message_id: 2,
+                protocol_operation: ProtocolOperation::SearchResultDone(SearchResultDone {
+                    result: LdapResult {
+                        result_code: ResultCode::NoSuchObject,
+                        matched_dn: LdapDn(s!()),
+                        diagnostic_message: s!(),
+                        referral: None,
+                    }
+                }),
+                controls: None,
+            })
+        );
     }
 }

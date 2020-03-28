@@ -8,12 +8,13 @@ pub mod util;
 
 use util::{ReadExt, VecExt};
 
-pub const OCTET_STRING_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x04);
-pub const INTEGER_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x02);
-pub const SEQUENCE_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x10);
-pub const ENUMERATED_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x0a);
-pub const NULL_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x05);
-pub const BOOL_TAG: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x01);
+pub const OCTET_STRING: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x04);
+pub const INTEGER: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x02);
+pub const SEQUENCE: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x10);
+pub const SET: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x11);
+pub const ENUMERATED: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x0a);
+pub const NULL: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x05);
+pub const BOOL: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x01);
 
 #[derive(Debug, PartialEq)]
 pub enum DeserializeError {
@@ -152,7 +153,7 @@ impl Serialize for str {
     fn serialize(&self, buffer: &mut dyn VecExt) {
         let length = Length::new(self.as_bytes().len() as u64);
 
-        OCTET_STRING_TAG.serialize(buffer);
+        OCTET_STRING.serialize(buffer);
         Length::serialize(&length, buffer);
         buffer.write(self.as_bytes());
     }
@@ -166,7 +167,7 @@ impl Serialize for String {
 
 impl Deserialize for String {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(OCTET_STRING_TAG)?;
+        buffer.tag(OCTET_STRING)?;
         let length = Length::deserialize(buffer)?;
 
         match std::str::from_utf8(buffer.slice(length)?) {
@@ -178,7 +179,7 @@ impl Deserialize for String {
 
 impl Deserialize for i32 {
     fn deserialize(bytes: &mut &[u8]) -> Result<Self, DeserializeError> {
-        bytes.tag(INTEGER_TAG)?;
+        bytes.tag(INTEGER)?;
         let length = Length::deserialize(bytes)?;
         Ok(bytes.int(length)? as i32)
     }
@@ -186,7 +187,7 @@ impl Deserialize for i32 {
 
 impl Serialize for i32 {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        INTEGER_TAG.serialize(buffer);
+        INTEGER.serialize(buffer);
         let ns = self.to_be_bytes();
         let start = if self.is_negative() {
             0
@@ -209,7 +210,7 @@ impl Serialize for i32 {
 
 impl Deserialize for u32 {
     fn deserialize(bytes: &mut &[u8]) -> Result<Self, DeserializeError> {
-        bytes.tag(INTEGER_TAG)?;
+        bytes.tag(INTEGER)?;
         let length = Length::deserialize(bytes)?;
         Ok(bytes.uint(length)? as u32)
     }
@@ -223,7 +224,7 @@ impl Serialize for u32 {
 
 impl Serialize for i64 {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        INTEGER_TAG.serialize(buffer);
+        INTEGER.serialize(buffer);
         let ns = self.to_be_bytes();
         let start = if self.is_negative() {
             0
@@ -246,7 +247,7 @@ impl Serialize for i64 {
 
 impl Deserialize for u64 {
     fn deserialize(bytes: &mut &[u8]) -> Result<Self, DeserializeError> {
-        bytes.tag(INTEGER_TAG)?;
+        bytes.tag(INTEGER)?;
         let length = Length::deserialize(bytes)?;
         Ok(bytes.uint(length)? as u64)
     }
@@ -262,7 +263,7 @@ pub struct Null;
 
 impl Deserialize for Null {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
-        buffer.tag(NULL_TAG)?;
+        buffer.tag(NULL)?;
         let length = Length::deserialize(buffer)?;
         let _ = buffer.slice(length)?;
 
@@ -272,14 +273,14 @@ impl Deserialize for Null {
 
 impl Serialize for Null {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        NULL_TAG.serialize(buffer);
+        NULL.serialize(buffer);
         Length::new(0).serialize(buffer);
     }
 }
 
 impl<T: Serialize> Serialize for Vec<T> {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        SEQUENCE_TAG.serialize(buffer);
+        SEQUENCE.serialize(buffer);
 
         util::serialize_sequence(buffer, |buffer| {
             for item in self {
@@ -289,18 +290,60 @@ impl<T: Serialize> Serialize for Vec<T> {
     }
 }
 
-pub(crate) struct Set<T: Serialize>(Vec<T>);
+impl<T: Deserialize> Deserialize for Vec<T> {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(SEQUENCE)?;
+        let length = Length::deserialize(buffer)?;
+        let slice = &mut buffer.slice(length)?;
 
-impl<T: Serialize> From<Vec<T>> for Set<T> {
+        let mut vec = Vec::new();
+        while !slice.is_empty() {
+            vec.push(T::deserialize(slice)?);
+        }
+
+        Ok(vec)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Set<T>(Vec<T>);
+
+impl<T> From<Vec<T>> for Set<T> {
     fn from(v: Vec<T>) -> Self {
         Self(v)
+    }
+}
+
+impl<T: Serialize> Serialize for Set<T> {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        SET.serialize(buffer);
+        util::serialize_sequence(buffer, |buffer| {
+            for item in &self.0 {
+                item.serialize(buffer);
+            }
+        });
+    }
+}
+
+impl<T: Deserialize> Deserialize for Set<T> {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(SET)?;
+        let length = Length::deserialize(buffer)?;
+        let slice = &mut buffer.slice(length)?;
+
+        let mut vec = Vec::new();
+        while !slice.is_empty() {
+            vec.push(T::deserialize(slice)?);
+        }
+
+        Ok(Self(vec))
     }
 }
 
 /// LDAP defines a BOOLEAN `true` to be `0xFF` and any other value `false`
 impl Serialize for bool {
     fn serialize(&self, buffer: &mut dyn VecExt) {
-        BOOL_TAG.serialize(buffer);
+        BOOL.serialize(buffer);
         Length::new(1).serialize(buffer);
 
         match self {

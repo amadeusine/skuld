@@ -71,6 +71,8 @@ pub enum ProtocolOperation {
     DeleteResponse(DeleteResponse),
     ModifyDnRequest(ModifyDnRequest),
     ModifyDnResponse(ModifyDnResponse),
+    CompareRequest(CompareRequest),
+    CompareResponse(CompareResponse),
 }
 
 impl Serialize for ProtocolOperation {
@@ -105,6 +107,10 @@ impl Serialize for ProtocolOperation {
             ProtocolOperation::ModifyDnResponse(_) => {
                 unreachable!("we don't serialize search modify dn responses")
             }
+            ProtocolOperation::CompareRequest(cr) => cr.serialize(buffer),
+            ProtocolOperation::CompareResponse(_) => {
+                unreachable!("we don't serialize search compare responses")
+            }
         }
     }
 }
@@ -135,6 +141,8 @@ impl Deserialize for ProtocolOperation {
             MODIFY_DN_RESPONSE => {
                 Ok(Self::ModifyDnResponse(ModifyDnResponse::deserialize(buffer)?))
             }
+            COMPARE_REQUEST => unreachable!("we don't deserialize modify dn requests"),
+            COMPARE_RESPONSE => Ok(Self::CompareResponse(CompareResponse::deserialize(buffer)?)),
             _ => Err(DeserializeError::InvalidValue),
         }
     }
@@ -1171,6 +1179,53 @@ impl Deserialize for ModifyDnResponse {
     }
 }
 
+const COMPARE_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 14);
+
+/// Compare an attribute description and value with a specific entry
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompareRequest {
+    /// Entry to compare to
+    pub entry: LdapDn,
+    /// Attribute description and value pair
+    pub attribute_value_assertion: AttributeValueAssertion,
+}
+
+impl Serialize for CompareRequest {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        COMPARE_REQUEST.serialize(buffer);
+        serialize_sequence(buffer, |buffer| {
+            self.entry.serialize(buffer);
+
+            SEQUENCE.serialize(buffer);
+            serialize_sequence(buffer, |buffer| {
+                self.attribute_value_assertion.attribute_description.serialize(buffer);
+                self.attribute_value_assertion.assertion_value.serialize(buffer);
+            });
+        });
+    }
+}
+
+const COMPARE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 15);
+
+/// Compare operation response
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompareResponse {
+    /// The result of the Compare operation
+    pub result: LdapResult,
+}
+
+impl Deserialize for CompareResponse {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(COMPARE_RESPONSE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
+
+        Ok(Self { result })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1582,6 +1637,56 @@ mod tests {
                         result_code: ResultCode::UnwillingToPerform,
                         matched_dn: LdapDn(s!()),
                         diagnostic_message: s!("no global superior knowledge"),
+                        referral: None,
+                    }
+                }),
+                controls: None,
+            })
+        );
+    }
+
+    #[test]
+    fn compare_request() {
+        let packet = &[
+            0x30, 0x44, 0x02, 0x01, 0x02, 0x6e, 0x3f, 0x04, 0x1a, 0x63, 0x6e, 0x3d, 0x61, 0x64,
+            0x6d, 0x69, 0x6e, 0x2c, 0x64, 0x63, 0x3d, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65,
+            0x2c, 0x64, 0x63, 0x3d, 0x6f, 0x72, 0x67, 0x30, 0x21, 0x04, 0x0b, 0x64, 0x65, 0x73,
+            0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x04, 0x12, 0x4c, 0x44, 0x41, 0x50,
+            0x20, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x69, 0x73, 0x74, 0x72, 0x61, 0x74, 0x6f, 0x72,
+        ];
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::CompareRequest(CompareRequest {
+                entry: LdapDn(s!("cn=admin,dc=example,dc=org")),
+                attribute_value_assertion: AttributeValueAssertion {
+                    attribute_description: AttributeDescription(s!("description")),
+                    assertion_value: s!("LDAP Administrator"),
+                },
+            }),
+            controls: None,
+        };
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+
+        assert_eq!(buffer, &packet[..]);
+    }
+
+    #[test]
+    fn compare_response() {
+        let message =
+            &[0x30, 0x0c, 0x02, 0x01, 0x02, 0x6f, 0x07, 0x0a, 0x01, 0x06, 0x04, 0x00, 0x04, 0x00];
+
+        assert_eq!(
+            LdapMessage::deserialize(&mut &message[..]),
+            Ok(LdapMessage {
+                message_id: 2,
+                protocol_operation: ProtocolOperation::CompareResponse(CompareResponse {
+                    result: LdapResult {
+                        result_code: ResultCode::CompareTrue,
+                        matched_dn: LdapDn(s!()),
+                        diagnostic_message: s!(),
                         referral: None,
                     }
                 }),

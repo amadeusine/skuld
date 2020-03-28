@@ -4,6 +4,9 @@ use crate::ber::{
     SEQUENCE,
 };
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct LdapRelativeDn(pub String);
+
 const CONTROLS: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 0);
 
 /// The main packet type of the protocol
@@ -66,6 +69,8 @@ pub enum ProtocolOperation {
     AddResponse(AddResponse),
     DeleteRequest(DeleteRequest),
     DeleteResponse(DeleteResponse),
+    ModifyDnRequest(ModifyDnRequest),
+    ModifyDnResponse(ModifyDnResponse),
 }
 
 impl Serialize for ProtocolOperation {
@@ -96,6 +101,10 @@ impl Serialize for ProtocolOperation {
             ProtocolOperation::DeleteResponse(_) => {
                 unreachable!("we don't serialize search delete responses")
             }
+            ProtocolOperation::ModifyDnRequest(mdr) => mdr.serialize(buffer),
+            ProtocolOperation::ModifyDnResponse(_) => {
+                unreachable!("we don't serialize search modify dn responses")
+            }
         }
     }
 }
@@ -122,6 +131,10 @@ impl Deserialize for ProtocolOperation {
             ADD_RESPONSE => Ok(Self::AddResponse(AddResponse::deserialize(buffer)?)),
             DELETE_REQUEST => unreachable!("we don't deserialize delete requests"),
             DELETE_RESPONSE => Ok(Self::DeleteResponse(DeleteResponse::deserialize(buffer)?)),
+            MODIFY_DN_REQUEST => unreachable!("we don't deserialize modify dn requests"),
+            MODIFY_DN_RESPONSE => {
+                Ok(Self::ModifyDnResponse(ModifyDnResponse::deserialize(buffer)?))
+            }
             _ => Err(DeserializeError::InvalidValue),
         }
     }
@@ -1099,6 +1112,65 @@ impl Deserialize for DeleteResponse {
     }
 }
 
+const MODIFY_DN_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 12);
+
+/// The Modify DN operation allows a client to change the Relative Distinguished
+/// Name (RDN) of an entry in the Directory and/or to move a subtree of entries
+/// to a new location in the Directory
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModifyDnRequest {
+    /// The name of the entry to modify
+    pub entry: LdapDn,
+    /// The new Relative DN of the entry
+    pub new_rdn: LdapRelativeDn,
+    /// Whether the old Relative DN attribute values are to be retained as
+    /// attributes of the entry or deleted
+    pub delete_old_rdn: bool,
+    /// The name of an existing object entry that becomes the parent of the
+    /// existing entry, if supplied
+    pub new_superior: Option<LdapDn>,
+}
+
+impl Serialize for ModifyDnRequest {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        const NEW_SUPERIOR: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 0);
+
+        MODIFY_DN_REQUEST.serialize(buffer);
+        serialize_sequence(buffer, |buffer| {
+            self.entry.serialize(buffer);
+            self.new_rdn.0.serialize(buffer);
+            self.delete_old_rdn.serialize(buffer);
+
+            if let Some(new_superior) = &self.new_superior {
+                NEW_SUPERIOR.serialize(buffer);
+                Length::new(new_superior.0.as_bytes().len() as u64).serialize(buffer);
+                buffer.write(new_superior.0.as_bytes());
+            }
+        });
+    }
+}
+
+const MODIFY_DN_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 13);
+
+/// Modify DN operation response
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModifyDnResponse {
+    /// The result of the Modify DN operation
+    pub result: LdapResult,
+}
+
+impl Deserialize for ModifyDnResponse {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(MODIFY_DN_RESPONSE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let result = ComponentsOfLdapResult::deserialize(buffer)?.into_inner();
+
+        Ok(Self { result })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1453,6 +1525,59 @@ mod tests {
             Ok(LdapMessage {
                 message_id: 2,
                 protocol_operation: ProtocolOperation::DeleteResponse(DeleteResponse {
+                    result: LdapResult {
+                        result_code: ResultCode::UnwillingToPerform,
+                        matched_dn: LdapDn(s!()),
+                        diagnostic_message: s!("no global superior knowledge"),
+                        referral: None,
+                    }
+                }),
+                controls: None,
+            })
+        );
+    }
+
+    #[test]
+    fn modify_dn_request() {
+        let packet = &[
+            0x30, 0x49, 0x02, 0x01, 0x02, 0x6c, 0x44, 0x04, 0x1d, 0x63, 0x6e, 0x3d, 0x73, 0x6f,
+            0x6d, 0x65, 0x75, 0x73, 0x65, 0x72, 0x2c, 0x64, 0x63, 0x3d, 0x65, 0x78, 0x61, 0x6d,
+            0x70, 0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x63, 0x6f, 0x6d, 0x04, 0x0c, 0x75, 0x69,
+            0x64, 0x3d, 0x74, 0x65, 0x73, 0x74, 0x2e, 0x75, 0x73, 0x72, 0x01, 0x01, 0x00, 0x80,
+            0x12, 0x64, 0x63, 0x3d, 0x64, 0x6f, 0x65, 0x73, 0x6e, 0x74, 0x2c, 0x64, 0x63, 0x3d,
+            0x65, 0x78, 0x69, 0x73, 0x74,
+        ];
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::ModifyDnRequest(ModifyDnRequest {
+                entry: LdapDn(s!("cn=someuser,dc=example,dc=com")),
+                new_rdn: LdapRelativeDn(s!("uid=test.usr")),
+                delete_old_rdn: false,
+                new_superior: Some(LdapDn(s!("dc=doesnt,dc=exist"))),
+            }),
+            controls: None,
+        };
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+
+        assert_eq!(buffer, &packet[..]);
+    }
+
+    #[test]
+    fn modify_dn_response() {
+        let message = &[
+            0x30, 0x28, 0x02, 0x01, 0x02, 0x6d, 0x23, 0x0a, 0x01, 0x35, 0x04, 0x00, 0x04, 0x1c,
+            0x6e, 0x6f, 0x20, 0x67, 0x6c, 0x6f, 0x62, 0x61, 0x6c, 0x20, 0x73, 0x75, 0x70, 0x65,
+            0x72, 0x69, 0x6f, 0x72, 0x20, 0x6b, 0x6e, 0x6f, 0x77, 0x6c, 0x65, 0x64, 0x67, 0x65,
+        ];
+
+        assert_eq!(
+            LdapMessage::deserialize(&mut &message[..]),
+            Ok(LdapMessage {
+                message_id: 2,
+                protocol_operation: ProtocolOperation::ModifyDnResponse(ModifyDnResponse {
                     result: LdapResult {
                         result_code: ResultCode::UnwillingToPerform,
                         matched_dn: LdapDn(s!()),

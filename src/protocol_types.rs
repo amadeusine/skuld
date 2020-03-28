@@ -90,14 +90,14 @@ impl Deserialize for ProtocolOperation {
 ///
 /// Controls sent by clients are termed 'request controls', and those
 /// sent by servers are termed 'response controls'.
-///
-///      Controls ::= SEQUENCE OF control Control
-///  
-///      Control ::= SEQUENCE {
-///           controlType             LDAPOID,
-///           criticality             BOOLEAN DEFAULT FALSE,
-///           controlValue            OCTET STRING OPTIONAL }
-///       
+/// ```notrust
+/// Controls ::= SEQUENCE OF control Control
+///   
+/// Control ::= SEQUENCE {
+///      controlType             LDAPOID,
+///      criticality             BOOLEAN DEFAULT FALSE,
+///      controlValue            OCTET STRING OPTIONAL }
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Control {
     pub control_type: LdapOid,

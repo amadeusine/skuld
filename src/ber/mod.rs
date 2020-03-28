@@ -90,6 +90,7 @@ impl Tag {
         self.0 & 0x1F
     }
 
+    /// Get the raw value of the tag
     pub const fn raw(self) -> u8 {
         self.0
     }
@@ -288,7 +289,7 @@ impl<T: Serialize> Serialize for Vec<T> {
     }
 }
 
-pub struct Set<T: Serialize>(Vec<T>);
+pub(crate) struct Set<T: Serialize>(Vec<T>);
 
 impl<T: Serialize> From<Vec<T>> for Set<T> {
     fn from(v: Vec<T>) -> Self {
@@ -296,6 +297,7 @@ impl<T: Serialize> From<Vec<T>> for Set<T> {
     }
 }
 
+/// LDAP defines a BOOLEAN `true` to be `0xFF` and any other value `false`
 impl Serialize for bool {
     fn serialize(&self, buffer: &mut dyn VecExt) {
         BOOL_TAG.serialize(buffer);

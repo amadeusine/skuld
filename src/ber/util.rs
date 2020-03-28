@@ -24,7 +24,7 @@ impl VecExt for TinyVec<[u8; 32]> {
     }
 }
 
-pub(crate) trait ReadExt {
+pub trait ReadExt {
     fn peek(&mut self) -> Result<u8, DeserializeError>;
     fn byte(&mut self) -> Result<u8, DeserializeError>;
     fn uint(&mut self, size: Length) -> Result<u64, DeserializeError>;
@@ -116,7 +116,7 @@ impl ReadExt for &'_ [u8] {
 
 /// This helper function creates a premade size and fills it in after the
 /// function is complete
-pub fn serialize_sequence<F: Fn(&mut dyn VecExt)>(buffer: &mut dyn VecExt, f: F) {
+pub(crate) fn serialize_sequence<F: Fn(&mut dyn VecExt)>(buffer: &mut dyn VecExt, f: F) {
     let mut temp_vec: TinyVec<[u8; 32]> = TinyVec::new();
     f(&mut temp_vec);
     Length::new(temp_vec.len() as u64).serialize(buffer);

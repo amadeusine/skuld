@@ -210,10 +210,7 @@ impl Serialize for ProtocolOperation {
 impl Deserialize for ProtocolOperation {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
         match Tag::new(buffer.peek()?) {
-            BIND_REQUEST => unreachable!("we don't deserialize bind requests"),
             BIND_RESPONSE => Ok(Self::BindResponse(BindResponse::deserialize(buffer)?)),
-            UNBIND_REQUEST => unreachable!("we don't deserialize unbind requests"),
-            SEARCH_REQUEST => unreachable!("we don't deserialize search requests"),
             SEARCH_RESULT_ENTRY => {
                 Ok(Self::SearchResultEntry(SearchResultEntry::deserialize(buffer)?))
             }
@@ -223,20 +220,13 @@ impl Deserialize for ProtocolOperation {
             SEARCH_RESULT_REFERENCE => {
                 Ok(Self::SearchResultReference(SearchResultReference::deserialize(buffer)?))
             }
-            MODIFY_REQUEST => unreachable!("we don't deserialize modify requests"),
             MODIFY_RESPONSE => Ok(Self::ModifyResponse(ModifyResponse::deserialize(buffer)?)),
-            ADD_REQUEST => unreachable!("we don't deserialize add requests"),
             ADD_RESPONSE => Ok(Self::AddResponse(AddResponse::deserialize(buffer)?)),
-            DELETE_REQUEST => unreachable!("we don't deserialize delete requests"),
             DELETE_RESPONSE => Ok(Self::DeleteResponse(DeleteResponse::deserialize(buffer)?)),
-            MODIFY_DN_REQUEST => unreachable!("we don't deserialize modify dn requests"),
             MODIFY_DN_RESPONSE => {
                 Ok(Self::ModifyDnResponse(ModifyDnResponse::deserialize(buffer)?))
             }
-            COMPARE_REQUEST => unreachable!("we don't deserialize modify dn requests"),
             COMPARE_RESPONSE => Ok(Self::CompareResponse(CompareResponse::deserialize(buffer)?)),
-            ABANDON_REQUEST => unreachable!("we don't deserialize abandon requests"),
-            EXTENDED_REQUEST => unreachable!("we don't deserialize extended requests"),
             EXTENDED_RESPONSE => Ok(Self::ExtendedResponse(ExtendedResponse::deserialize(buffer)?)),
             INTERMEDIATE_RESPONSE => {
                 Ok(Self::IntermediateResponse(IntermediateResponse::deserialize(buffer)?))

@@ -8,7 +8,7 @@ use nom::{
     },
     combinator::{opt, recognize},
     multi::{many0, many1},
-    sequence::{terminated, tuple},
+    sequence::{preceded, terminated, tuple},
     IResult, InputTakeAtPosition,
 };
 
@@ -149,8 +149,43 @@ fn any_substring(s: &str) -> IResult<&str, Vec<&str>> {
     Ok((s, substrs))
 }
 
+/// extensible     = ( attr [dnattrs]
+///                      [matchingrule] COLON EQUALS assertionvalue )
+///                      / ( [dnattrs]
+///                           matchingrule COLON EQUALS assertionvalue )
 fn extensible(s: &str) -> IResult<&str, search::Filter> {
-    todo!("extensible search parsing")
+    let first =
+        tuple((attr, opt(dn_attrs), opt(matching_rule), ch(COLON), ch(EQUALS), assertion_value));
+    let second = tuple((opt(dn_attrs), matching_rule, ch(COLON), ch(EQUALS), assertion_value));
+
+    if let Ok((s, (attr_desc, dn_attrs, matching_rule, _, _, assertion_value))) = first(s) {
+        let filter = search::Filter::ExtensibleMatch(search::MatchingRuleAssertion {
+            matching_rule: matching_rule.map(Into::into),
+            r#type: Some(pt::AttributeDescription(attr_desc.to_string())),
+            match_value: assertion_value.to_string(),
+            dn_attributes: dn_attrs.is_some(),
+        });
+
+        return Ok((s, filter));
+    }
+
+    let (s, (dn_attrs, matching_rule, _, _, assertion_value)) = second(s)?;
+    let filter = search::Filter::ExtensibleMatch(search::MatchingRuleAssertion {
+        matching_rule: Some(matching_rule.to_string()),
+        r#type: None,
+        match_value: assertion_value.to_string(),
+        dn_attributes: dn_attrs.is_some(),
+    });
+
+    Ok((s, filter))
+}
+
+fn dn_attrs(s: &str) -> IResult<&str, &str> {
+    preceded(ch(COLON), alt((tag("dn"), tag("DN"))))(s)
+}
+
+fn matching_rule(s: &str) -> IResult<&str, &str> {
+    preceded(ch(COLON), oid)(s)
 }
 
 enum FilterType {
@@ -392,6 +427,64 @@ mod tests {
         assert_eq!(
             parse_search_string(filter).unwrap(),
             search::Filter::Present(pt::AttributeDescription(s!("cn")))
+        );
+    }
+
+    #[test]
+    fn extensible() {
+        let filter = "(cn:caseExactMatch:=Fred Flintstone)";
+        assert_eq!(
+            parse_search_string(filter).unwrap(),
+            search::Filter::ExtensibleMatch(search::MatchingRuleAssertion {
+                matching_rule: Some(s!("caseExactMatch")),
+                r#type: Some(pt::AttributeDescription(s!("cn"))),
+                match_value: s!("Fred Flintstone"),
+                dn_attributes: false,
+            })
+        );
+
+        let filter = "(cn:dn:caseExactMatch:=Fred Flintstone)";
+        assert_eq!(
+            parse_search_string(filter).unwrap(),
+            search::Filter::ExtensibleMatch(search::MatchingRuleAssertion {
+                matching_rule: Some(s!("caseExactMatch")),
+                r#type: Some(pt::AttributeDescription(s!("cn"))),
+                match_value: s!("Fred Flintstone"),
+                dn_attributes: true,
+            })
+        );
+
+        let filter = "(cn:=Betty Rubble)";
+        assert_eq!(
+            parse_search_string(filter).unwrap(),
+            search::Filter::ExtensibleMatch(search::MatchingRuleAssertion {
+                matching_rule: None,
+                r#type: Some(pt::AttributeDescription(s!("cn"))),
+                match_value: s!("Betty Rubble"),
+                dn_attributes: false,
+            })
+        );
+
+        let filter = "(:1.2.3:=Wilma Flintstone)";
+        assert_eq!(
+            parse_search_string(filter).unwrap(),
+            search::Filter::ExtensibleMatch(search::MatchingRuleAssertion {
+                matching_rule: Some(s!("1.2.3")),
+                r#type: None,
+                match_value: s!("Wilma Flintstone"),
+                dn_attributes: false,
+            })
+        );
+
+        let filter = "(o:dn:=Ace Industry)";
+        assert_eq!(
+            parse_search_string(filter).unwrap(),
+            search::Filter::ExtensibleMatch(search::MatchingRuleAssertion {
+                matching_rule: None,
+                r#type: Some(pt::AttributeDescription(s!("o"))),
+                match_value: s!("Ace Industry"),
+                dn_attributes: true,
+            })
         );
     }
 }

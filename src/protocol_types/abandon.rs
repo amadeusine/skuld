@@ -1,12 +1,12 @@
 use super::*;
 
-pub const ABANDON_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 16);
+pub(crate) const ABANDON_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 16);
 
 /// Request the server abandon a previously sent request
 #[derive(Clone, Debug, PartialEq)]
-pub struct AbandonRequest {
+pub(crate) struct AbandonRequest {
     /// Message ID to abandon
-    pub message_id: i32,
+    pub(crate) message_id: i32,
 }
 
 impl Serialize for AbandonRequest {

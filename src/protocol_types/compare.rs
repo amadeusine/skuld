@@ -1,14 +1,15 @@
 use super::*;
 
-pub const COMPARE_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 14);
+pub(crate) const COMPARE_REQUEST: Tag =
+    Tag::from_parts(Class::Application, Aspect::Constructed, 14);
 
 /// Compare an attribute description and value with a specific entry
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompareRequest {
+pub(crate) struct CompareRequest {
     /// Entry to compare to
-    pub entry: LdapDn,
+    pub(crate) entry: LdapDn,
     /// Attribute description and value pair
-    pub attribute_value_assertion: AttributeValueAssertion,
+    pub(crate) attribute_value_assertion: AttributeValueAssertion,
 }
 
 impl Serialize for CompareRequest {
@@ -26,13 +27,14 @@ impl Serialize for CompareRequest {
     }
 }
 
-pub const COMPARE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 15);
+pub(crate) const COMPARE_RESPONSE: Tag =
+    Tag::from_parts(Class::Application, Aspect::Constructed, 15);
 
 /// Compare operation response
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompareResponse {
+pub(crate) struct CompareResponse {
     /// The result of the Compare operation
-    pub result: LdapResult,
+    pub(crate) result: LdapResult,
 }
 
 impl Deserialize for CompareResponse {

@@ -1,11 +1,11 @@
 use super::*;
 
-pub const EXTENDED_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 23);
+pub(crate) const EXTENDED_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 23);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExtendedRequest {
-    pub request_name: LdapOid,
-    pub request_value: Option<String>,
+pub(crate) struct ExtendedRequest {
+    pub(crate) request_name: LdapOid,
+    pub(crate) request_value: Option<String>,
 }
 
 impl Serialize for ExtendedRequest {
@@ -28,13 +28,14 @@ impl Serialize for ExtendedRequest {
     }
 }
 
-pub const EXTENDED_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 24);
+pub(crate) const EXTENDED_RESPONSE: Tag =
+    Tag::from_parts(Class::Application, Aspect::Primitive, 24);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExtendedResponse {
-    pub result: LdapResult,
-    pub response_name: Option<LdapOid>,
-    pub response_value: Option<String>,
+pub(crate) struct ExtendedResponse {
+    pub(crate) result: LdapResult,
+    pub(crate) response_name: Option<LdapOid>,
+    pub(crate) response_value: Option<String>,
 }
 
 impl Deserialize for ExtendedResponse {
@@ -84,12 +85,13 @@ impl Deserialize for ExtendedResponse {
     }
 }
 
-pub const INTERMEDIATE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 25);
+pub(crate) const INTERMEDIATE_RESPONSE: Tag =
+    Tag::from_parts(Class::Application, Aspect::Primitive, 25);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct IntermediateResponse {
-    pub response_name: Option<LdapOid>,
-    pub response_value: Option<String>,
+pub(crate) struct IntermediateResponse {
+    pub(crate) response_name: Option<LdapOid>,
+    pub(crate) response_value: Option<String>,
 }
 
 impl Deserialize for IntermediateResponse {

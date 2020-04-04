@@ -1,28 +1,28 @@
 use super::*;
 
-pub const SEARCH_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 3);
+pub(crate) const SEARCH_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 3);
 
 /// A search request
 #[derive(Clone, Debug, PartialEq)]
-pub struct SearchRequest {
+pub(crate) struct SearchRequest {
     /// The base object to search
-    pub base_object: LdapDn,
+    pub(crate) base_object: LdapDn,
     /// The scope in which to search
-    pub scope: Scope,
+    pub(crate) scope: Scope,
     /// Behavior when encountering aliases
-    pub deref_alias: DerefAlias,
+    pub(crate) deref_alias: DerefAlias,
     /// The max number of entries to be returned, with 0 indicating no size
     /// limit
-    pub size_limit: i32,
+    pub(crate) size_limit: i32,
     /// A time limit in seconds to process the search request
-    pub time_limit: i32,
+    pub(crate) time_limit: i32,
     /// Whether the search results contain both attribute descriptions and
     /// values or only attribute descriptions
-    pub types_only: bool,
+    pub(crate) types_only: bool,
     /// The filter of which to match entries with
-    pub filter: Filter,
+    pub(crate) filter: Filter,
     ///
-    pub attributes: Vec<String>,
+    pub(crate) attributes: Vec<String>,
 }
 
 impl Serialize for SearchRequest {
@@ -44,7 +44,7 @@ impl Serialize for SearchRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
-pub enum Scope {
+pub(crate) enum Scope {
     /// The scope is constrained to the entry named by `baseObject`
     BaseObject = 0,
     /// The scope is constrained to the immediate subordinates of the entry
@@ -64,8 +64,9 @@ impl Serialize for Scope {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 #[repr(u8)]
-pub enum DerefAlias {
+pub(crate) enum DerefAlias {
     /// Do not dereference aliases during processing of the search
     NeverDerefAlias = 0,
     /// While searching subordinates of the base object, dereference any alias
@@ -88,7 +89,7 @@ impl Serialize for DerefAlias {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Filter {
+pub(crate) enum Filter {
     /// A combination filter where all subfilters must match to return a result
     And(Vec<Filter>),
     /// A combination filter where at least one subfilter must match to return a
@@ -203,16 +204,16 @@ impl Serialize for Filter {
 
 /// A substring filter
 #[derive(Clone, Debug, PartialEq)]
-pub struct SubstringFilter {
+pub(crate) struct SubstringFilter {
     /// The attribute description whose attribute value to match the substrings
     /// on
-    pub r#type: AttributeDescription,
+    pub(crate) r#type: AttributeDescription,
     /// The substrings to match on
-    pub substrings: Vec<Substring>,
+    pub(crate) substrings: Vec<Substring>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Substring {
+pub(crate) enum Substring {
     /// The initial value of the substring match, at most one and must be the
     /// first element in `SubstringFilter.substrings`
     Initial(AssertionValue),
@@ -250,22 +251,23 @@ impl Serialize for Substring {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MatchingRuleAssertion {
-    pub matching_rule: Option<String>,
-    pub r#type: Option<AttributeDescription>,
-    pub match_value: AssertionValue,
-    pub dn_attributes: bool,
+pub(crate) struct MatchingRuleAssertion {
+    pub(crate) matching_rule: Option<String>,
+    pub(crate) r#type: Option<AttributeDescription>,
+    pub(crate) match_value: AssertionValue,
+    pub(crate) dn_attributes: bool,
 }
 
-pub const SEARCH_RESULT_ENTRY: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 4);
+pub(crate) const SEARCH_RESULT_ENTRY: Tag =
+    Tag::from_parts(Class::Application, Aspect::Constructed, 4);
 
 /// A result from a Search operation
 #[derive(Clone, Debug, PartialEq)]
-pub struct SearchResultEntry {
+pub(crate) struct SearchResultEntry {
     /// The object name of this result
-    pub object_name: LdapDn,
+    pub(crate) object_name: LdapDn,
     /// The list of attributes for
-    pub attribute_list: Vec<PartialAttribute>,
+    pub(crate) attribute_list: Vec<PartialAttribute>,
 }
 
 impl Deserialize for SearchResultEntry {
@@ -281,14 +283,14 @@ impl Deserialize for SearchResultEntry {
     }
 }
 
-pub const SEARCH_RESULT_REFERENCE: Tag =
+pub(crate) const SEARCH_RESULT_REFERENCE: Tag =
     Tag::from_parts(Class::Application, Aspect::Constructed, 19);
 
 /// Search results that have not been visited that reside on another LDAP server
 #[derive(Clone, Debug, PartialEq)]
-pub struct SearchResultReference {
+pub(crate) struct SearchResultReference {
     /// URIs of the LDAP servers with query
-    pub uris: Vec<Uri>,
+    pub(crate) uris: Vec<Uri>,
 }
 
 impl Deserialize for SearchResultReference {
@@ -306,13 +308,14 @@ impl Deserialize for SearchResultReference {
     }
 }
 
-pub const SEARCH_RESULT_DONE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 5);
+pub(crate) const SEARCH_RESULT_DONE: Tag =
+    Tag::from_parts(Class::Application, Aspect::Constructed, 5);
 
 /// All search result entries have been returned
 #[derive(Clone, Debug, PartialEq)]
-pub struct SearchResultDone {
+pub(crate) struct SearchResultDone {
     /// The result of the search
-    pub result: LdapResult,
+    pub(crate) result: LdapResult,
 }
 
 impl Deserialize for SearchResultDone {

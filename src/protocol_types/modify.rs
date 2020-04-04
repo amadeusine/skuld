@@ -1,14 +1,14 @@
 use super::*;
 
-pub const MODIFY_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 6);
+pub(crate) const MODIFY_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 6);
 
 /// Request to modify an object
 #[derive(Clone, Debug, PartialEq)]
-pub struct ModifyRequest {
+pub(crate) struct ModifyRequest {
     /// The object to modify
-    pub object: LdapDn,
+    pub(crate) object: LdapDn,
     /// Sequence of changes to apply to the object
-    pub changes: Vec<Change>,
+    pub(crate) changes: Vec<Change>,
 }
 
 impl Serialize for ModifyRequest {
@@ -23,11 +23,11 @@ impl Serialize for ModifyRequest {
 
 /// An individual change to make to some object
 #[derive(Clone, Debug, PartialEq)]
-pub struct Change {
+pub(crate) struct Change {
     /// The operation to perform on the object
-    pub operation: ModifyOperation,
+    pub(crate) operation: ModifyOperation,
     /// Attributes to modify
-    pub modification: PartialAttribute,
+    pub(crate) modification: PartialAttribute,
 }
 
 impl Serialize for Change {
@@ -43,7 +43,7 @@ impl Serialize for Change {
 /// The types of operations that can be applied to an object
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
-pub enum ModifyOperation {
+pub(crate) enum ModifyOperation {
     Add = 0,
     Delete = 1,
     Replace = 2,
@@ -57,13 +57,13 @@ impl Serialize for ModifyOperation {
     }
 }
 
-pub const MODIFY_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 7);
+pub(crate) const MODIFY_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 7);
 
 /// Modify operation response
 #[derive(Clone, Debug, PartialEq)]
-pub struct ModifyResponse {
+pub(crate) struct ModifyResponse {
     /// The result of the Modify operation
-    pub result: LdapResult,
+    pub(crate) result: LdapResult,
 }
 
 impl Deserialize for ModifyResponse {
@@ -78,19 +78,19 @@ impl Deserialize for ModifyResponse {
     }
 }
 
-pub const ADD_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 8);
+pub(crate) const ADD_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 8);
 
 /// For all intents and purposes these types are no different from each other
 /// EXCEPT that `Attribute` MUST have at least one value inside of it
-pub type Attribute = PartialAttribute;
+pub(crate) type Attribute = PartialAttribute;
 
 /// Request to add an entry
 #[derive(Clone, Debug, PartialEq)]
-pub struct AddRequest {
+pub(crate) struct AddRequest {
     /// DN of the entry to add attributes to
-    pub entry: LdapDn,
+    pub(crate) entry: LdapDn,
     /// Attributes to add to the above entry
-    pub attributes: Vec<Attribute>,
+    pub(crate) attributes: Vec<Attribute>,
 }
 
 impl Serialize for AddRequest {
@@ -103,13 +103,13 @@ impl Serialize for AddRequest {
     }
 }
 
-pub const ADD_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 9);
+pub(crate) const ADD_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 9);
 
 /// Add operation response
 #[derive(Clone, Debug, PartialEq)]
-pub struct AddResponse {
+pub(crate) struct AddResponse {
     /// The result of the Add operation
-    pub result: LdapResult,
+    pub(crate) result: LdapResult,
 }
 
 impl Deserialize for AddResponse {
@@ -124,13 +124,13 @@ impl Deserialize for AddResponse {
     }
 }
 
-pub const DELETE_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 10);
+pub(crate) const DELETE_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 10);
 
 /// Request to delete an object
 #[derive(Clone, Debug, PartialEq)]
-pub struct DeleteRequest {
+pub(crate) struct DeleteRequest {
     /// DN of the object to be deleted
-    pub entry: LdapDn,
+    pub(crate) entry: LdapDn,
 }
 
 impl Serialize for DeleteRequest {
@@ -141,13 +141,14 @@ impl Serialize for DeleteRequest {
     }
 }
 
-pub const DELETE_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 11);
+pub(crate) const DELETE_RESPONSE: Tag =
+    Tag::from_parts(Class::Application, Aspect::Constructed, 11);
 
 /// Delete operation response
 #[derive(Clone, Debug, PartialEq)]
-pub struct DeleteResponse {
+pub(crate) struct DeleteResponse {
     /// The result of the Delete operation
-    pub result: LdapResult,
+    pub(crate) result: LdapResult,
 }
 
 impl Deserialize for DeleteResponse {
@@ -162,23 +163,24 @@ impl Deserialize for DeleteResponse {
     }
 }
 
-pub const MODIFY_DN_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 12);
+pub(crate) const MODIFY_DN_REQUEST: Tag =
+    Tag::from_parts(Class::Application, Aspect::Constructed, 12);
 
 /// The Modify DN operation allows a client to change the Relative Distinguished
 /// Name (RDN) of an entry in the Directory and/or to move a subtree of entries
 /// to a new location in the Directory
 #[derive(Clone, Debug, PartialEq)]
-pub struct ModifyDnRequest {
+pub(crate) struct ModifyDnRequest {
     /// The name of the entry to modify
-    pub entry: LdapDn,
+    pub(crate) entry: LdapDn,
     /// The new Relative DN of the entry
-    pub new_rdn: LdapRelativeDn,
+    pub(crate) new_rdn: LdapRelativeDn,
     /// Whether the old Relative DN attribute values are to be retained as
     /// attributes of the entry or deleted
-    pub delete_old_rdn: bool,
+    pub(crate) delete_old_rdn: bool,
     /// The name of an existing object entry that becomes the parent of the
     /// existing entry, if supplied
-    pub new_superior: Option<LdapDn>,
+    pub(crate) new_superior: Option<LdapDn>,
 }
 
 impl Serialize for ModifyDnRequest {
@@ -200,13 +202,14 @@ impl Serialize for ModifyDnRequest {
     }
 }
 
-pub const MODIFY_DN_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 13);
+pub(crate) const MODIFY_DN_RESPONSE: Tag =
+    Tag::from_parts(Class::Application, Aspect::Constructed, 13);
 
 /// Modify DN operation response
 #[derive(Clone, Debug, PartialEq)]
-pub struct ModifyDnResponse {
+pub(crate) struct ModifyDnResponse {
     /// The result of the Modify DN operation
-    pub result: LdapResult,
+    pub(crate) result: LdapResult,
 }
 
 impl Deserialize for ModifyDnResponse {

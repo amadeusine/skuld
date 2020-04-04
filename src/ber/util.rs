@@ -1,7 +1,7 @@
 use super::{DeserializeError, Length, Serialize, Tag};
 use tinyvec::TinyVec;
 
-pub trait VecExt {
+pub(crate) trait VecExt {
     fn write(&mut self, slice: &[u8]);
     fn write_byte(&mut self, byte: u8);
 }
@@ -24,7 +24,7 @@ impl VecExt for TinyVec<[u8; 32]> {
     }
 }
 
-pub trait ReadExt {
+pub(crate) trait ReadExt {
     fn peek(&mut self) -> Result<u8, DeserializeError>;
     fn byte(&mut self) -> Result<u8, DeserializeError>;
     fn uint(&mut self, size: Length) -> Result<u64, DeserializeError>;

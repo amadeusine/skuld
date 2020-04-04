@@ -1,7 +1,9 @@
 //! # `ber`
 //!
 //! This module contains the types and traits for serializing and deserializing
-//! the ASN.1 LDAP types from the Basic Encoding Rules (BER) scheme.
+//! the ASN.1 LDAP types from the Basic Encoding Rules (BER) scheme. This
+//! documentation serves to help explain the concepts used in the protocol
+//! definition to contributors and those who are interested
 //!
 //! ## How to read ASN.1
 //!
@@ -15,15 +17,15 @@
 //! below:
 //!
 //! | Name                   | Aspect      | Tag Number dec [hex] |
-//! |------------------------|-------------|----------------------|
-//! | BOOLEAN                | Primitive   | 1 [0x01]             |
-//! | INTEGER                | Primitive   | 2 [0x02]             |
-//! | OCTET STRING           | Primitive^  | 4 [0x04]             |
-//! | SEQUENCE / SEQUENCE OF | Constructed | 16 [0x10]            |
-//! | SET / SET OF           | Constructed | 17 [0x11]            |
+//! |------------------------|------------------------|----------------------|
+//! | BOOLEAN                | Primitive              | 1 [0x01]             |
+//! | INTEGER                | Primitive              | 2 [0x02]             |
+//! | OCTET STRING           | Primitive<sup>1</sup>  | 4 [0x04]             |
+//! | SEQUENCE / SEQUENCE OF | Constructed            | 16 [0x10]            |
+//! | SET / SET OF           | Constructed            | 17 [0x11]            |
 //!
-//! ^ `OCTET STRING` is defined as both primitive and constructed but the LDAP
-//! specification restricts it to the Primitive encoding only
+//! <sup>1</sup> `OCTET STRING` is defined as both primitive and constructed but
+//! the LDAP specification restricts it to the Primitive encoding only
 //!
 //! `OCTET STRING` is simply a series of bytes
 //!
@@ -216,16 +218,18 @@
 //! disguise, with the bytes defining it: `04 0c 75 69 64 3d 74 65 73 74 2e 75
 //! 73 72`, easy enough: `uid=test.usr`. `deletoldrdn` is a bool, which has a
 //! tag number of 1, and only has a length of one, whose value is `00`. LDAP
-//! defines boolean `TRUE` to be `FF`, so this is `FALSE`. `newSuperior` is an
-//! optional context-specific `LDAPDN`. So we check to see if we're at the end
-//! of the message yet -- nope! still have more bytes to process, then we check
-//! the tag: `80` has a bit pattern of `10|0|00000` which tells us its a
-//! context-specific, universal type with a tag number of 0, that's our type!
-//! The length and content are decoded as usual. We're still not done however,
-//! we finished decoding `ModifyDNRequest`, but we still have the `controls`
-//! field of `LDAPMessage`, which is also an optional type. Check one: have we
-//! reached the end of the packet? As a matter of fact, yes, we have! Therefore
-//! `controls` is `None` and we've finished decoding the entire packet!
+//! defines boolean `TRUE` to be `FF`, so this is `FALSE`.
+//!
+//! The next field, `newSuperior`, is an optional context-specific `LDAPDN`. So
+//! we check to see if we're at the end of the message yet -- nope! still have
+//! more bytes to process, then we check the tag: `80` has a bit pattern of
+//! `10|0|00000` which tells us its a context-specific, universal type with a
+//! tag number of 0, that's our type! The length and content are decoded as
+//! usual. We're still not done however, we finished decoding `ModifyDNRequest`,
+//! but we still have the `controls` field of `LDAPMessage`, which is also an
+//! optional type. Check one: have we reached the end of the packet? As a matter
+//! of fact, yes, we have! Therefore `controls` is `None` and we've finished
+//! decoding the entire packet!
 //!
 //! Here's a more graphical representation of the above packet (lengths in
 //! brackets):
@@ -256,20 +260,20 @@
 //! ```
 //!
 
-pub mod util;
+pub(crate) mod util;
 
 use util::{ReadExt, VecExt};
 
-pub const OCTET_STRING: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x04);
-pub const INTEGER: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x02);
-pub const SEQUENCE: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x10);
-pub const SET: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x11);
-pub const ENUMERATED: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x0a);
-pub const NULL: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x05);
-pub const BOOL: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x01);
+pub(crate) const OCTET_STRING: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x04);
+pub(crate) const INTEGER: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x02);
+pub(crate) const SEQUENCE: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x10);
+pub(crate) const SET: Tag = Tag::from_parts(Class::Universal, Aspect::Constructed, 0x11);
+pub(crate) const ENUMERATED: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x0a);
+pub(crate) const NULL: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x05);
+pub(crate) const BOOL: Tag = Tag::from_parts(Class::Universal, Aspect::Primitive, 0x01);
 
 #[derive(Debug, PartialEq)]
-pub enum DeserializeError {
+pub(crate) enum DeserializeError {
     BadTag { expected: Tag, got: Tag },
     BufferTooShort,
     IndefiniteLength,
@@ -279,18 +283,18 @@ pub enum DeserializeError {
     InvalidValue,
 }
 
-pub trait Serialize {
+pub(crate) trait Serialize {
     fn serialize(&self, buffer: &mut dyn VecExt);
 }
 
-pub trait Deserialize: Sized {
+pub(crate) trait Deserialize: Sized {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError>;
 }
 
 /// Represents the class of the tag
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
-pub enum Class {
+pub(crate) enum Class {
     Universal = 0,
     Application = 1,
     ContextSpecific = 2,
@@ -300,26 +304,26 @@ pub enum Class {
 /// Represents whether or not the type is Primitive or Constructed
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
-pub enum Aspect {
+pub(crate) enum Aspect {
     Primitive = 0,
     Constructed = 1,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Tag(u8);
+pub(crate) struct Tag(u8);
 
 impl Tag {
     /// Construct a new `Tag`
-    pub const fn new(byte: u8) -> Self {
+    pub(crate) const fn new(byte: u8) -> Self {
         Tag(byte)
     }
 
-    pub const fn from_parts(class: Class, aspect: Aspect, tag: u8) -> Self {
+    pub(crate) const fn from_parts(class: Class, aspect: Aspect, tag: u8) -> Self {
         Tag((tag & 0x1F) | ((class as u8) << 6) | ((aspect as u8) << 5))
     }
 
     /// Get the `Class` of the tag
-    pub fn class(self) -> Class {
+    pub(crate) fn class(self) -> Class {
         match self.0 >> 6 {
             0 => Class::Universal,
             1 => Class::Application,
@@ -330,7 +334,7 @@ impl Tag {
     }
 
     /// Get the `Aspect` of the tag
-    pub fn aspect(self) -> Aspect {
+    pub(crate) fn aspect(self) -> Aspect {
         match (self.0 >> 5) & 1 {
             0 => Aspect::Primitive,
             1 => Aspect::Constructed,
@@ -339,12 +343,12 @@ impl Tag {
     }
 
     /// Get the tag number
-    pub fn number(self) -> u8 {
+    pub(crate) fn number(self) -> u8 {
         self.0 & 0x1F
     }
 
     /// Get the raw value of the tag
-    pub const fn raw(self) -> u8 {
+    pub(crate) const fn raw(self) -> u8 {
         self.0
     }
 }
@@ -356,10 +360,10 @@ impl Serialize for Tag {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Length(u64);
+pub(crate) struct Length(u64);
 
 impl Length {
-    pub fn new(len: u64) -> Self {
+    pub(crate) fn new(len: u64) -> Self {
         Self(len)
     }
 }
@@ -511,7 +515,7 @@ impl Serialize for u64 {
     }
 }
 
-pub struct Null;
+pub(crate) struct Null;
 
 impl Deserialize for Null {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
@@ -558,7 +562,7 @@ impl<T: Deserialize> Deserialize for Vec<T> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Set<T>(Vec<T>);
+pub(crate) struct Set<T>(Vec<T>);
 
 impl<T> From<Vec<T>> for Set<T> {
     fn from(v: Vec<T>) -> Self {

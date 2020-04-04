@@ -1,16 +1,16 @@
 use super::*;
 
-pub const BIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 0);
+pub(crate) const BIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 0);
 
 /// A Bind request providing any supplied authentication credentials
 #[derive(Clone, Debug, PartialEq)]
-pub struct BindRequest {
+pub(crate) struct BindRequest {
     /// LDAP version -- should always be 3
-    pub version: u32,
+    pub(crate) version: u32,
     /// The DN of the user
-    pub name: LdapDn,
+    pub(crate) name: LdapDn,
     /// The authentication method (Simple or SASL)
-    pub authentication: AuthenticationChoice,
+    pub(crate) authentication: AuthenticationChoice,
 }
 
 impl Serialize for BindRequest {
@@ -30,7 +30,7 @@ const SASL: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 3
 
 /// The authentication method in a Bind request
 #[derive(Clone, Debug, PartialEq)]
-pub enum AuthenticationChoice {
+pub(crate) enum AuthenticationChoice {
     /// Simple, password based authentication
     Simple(String),
     /// SASL authentication
@@ -55,19 +55,19 @@ impl Serialize for AuthenticationChoice {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SaslCredentials {
-    pub mechanism: String,
-    pub credentials: Option<String>,
+pub(crate) struct SaslCredentials {
+    pub(crate) mechanism: String,
+    pub(crate) credentials: Option<String>,
 }
 
-pub const BIND_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 1);
+pub(crate) const BIND_RESPONSE: Tag = Tag::from_parts(Class::Application, Aspect::Constructed, 1);
 
 /// The server response to a Bind request
 #[derive(Clone, Debug, PartialEq)]
-pub struct BindResponse {
+pub(crate) struct BindResponse {
     /// Result of the Bind request
-    pub result: LdapResult,
-    pub server_sasl_creds: Option<String>,
+    pub(crate) result: LdapResult,
+    pub(crate) server_sasl_creds: Option<String>,
 }
 
 impl Deserialize for BindResponse {
@@ -97,11 +97,11 @@ impl Deserialize for BindResponse {
     }
 }
 
-pub const UNBIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 2);
+pub(crate) const UNBIND_REQUEST: Tag = Tag::from_parts(Class::Application, Aspect::Primitive, 2);
 
 /// A termination request to gracefully end communication
 #[derive(Clone, Debug, PartialEq)]
-pub struct UnbindRequest;
+pub(crate) struct UnbindRequest;
 
 impl Serialize for UnbindRequest {
     fn serialize(&self, buffer: &mut dyn VecExt) {

@@ -11,15 +11,15 @@ use crate::ber::{
     SEQUENCE,
 };
 
-pub use {abandon::*, bind::*, compare::*, extended::*, modify::*, search::*};
+pub(crate) use {abandon::*, bind::*, compare::*, extended::*, modify::*, search::*};
 
-pub type AssertionValue = String;
-pub type AttributeValue = String;
-pub type Uri = String;
+pub(crate) type AssertionValue = String;
+pub(crate) type AttributeValue = String;
+pub(crate) type Uri = String;
 
 /// A UTF-8 string that is constrained to <attributedescription>
 #[derive(Clone, Debug, PartialEq)]
-pub struct AttributeDescription(String);
+pub(crate) struct AttributeDescription(String);
 
 impl Deserialize for AttributeDescription {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
@@ -38,7 +38,7 @@ impl Serialize for AttributeDescription {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LdapRelativeDn(pub String);
+pub(crate) struct LdapRelativeDn(pub(crate) String);
 
 /// Wrapper type around a UTF-8 encoded string that is restricted to
 /// <numericoid> -- which I assume to be of the format:
@@ -47,7 +47,7 @@ pub struct LdapRelativeDn(pub String);
 ///
 /// Can't actually find the definition point for it
 #[derive(Clone, Debug, PartialEq)]
-pub struct LdapOid(String);
+pub(crate) struct LdapOid(String);
 
 impl Deserialize for LdapOid {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
@@ -69,7 +69,7 @@ impl Serialize for LdapOid {
 /// <distinguishedName> which seems to be a comma separated list of
 /// <relativeDistinguishedName>
 #[derive(Clone, Debug, PartialEq)]
-pub struct LdapDn(pub String);
+pub(crate) struct LdapDn(pub(crate) String);
 
 impl Deserialize for LdapDn {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
@@ -91,13 +91,13 @@ const CONTROLS: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructe
 
 /// The main packet type of the protocol
 #[derive(Clone, Debug, PartialEq)]
-pub struct LdapMessage {
+pub(crate) struct LdapMessage {
     /// A non-zero, session-unique message ID
-    pub message_id: i32,
+    pub(crate) message_id: i32,
     /// The protocol operation
-    pub protocol_operation: ProtocolOperation,
+    pub(crate) protocol_operation: ProtocolOperation,
     /// Optional controls contained by this message
-    pub controls: Option<Vec<Control>>,
+    pub(crate) controls: Option<Vec<Control>>,
 }
 
 impl Serialize for LdapMessage {
@@ -135,7 +135,7 @@ impl Deserialize for LdapMessage {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ProtocolOperation {
+pub(crate) enum ProtocolOperation {
     BindRequest(BindRequest),
     BindResponse(BindResponse),
     UnbindRequest(UnbindRequest),
@@ -254,24 +254,24 @@ impl Deserialize for ProtocolOperation {
 ///      controlValue            OCTET STRING OPTIONAL }
 /// ```
 #[derive(Clone, Debug, PartialEq)]
-pub struct Control {
-    pub control_type: LdapOid,
-    pub criticality: bool,
-    pub control_value: Option<String>,
+pub(crate) struct Control {
+    pub(crate) control_type: LdapOid,
+    pub(crate) criticality: bool,
+    pub(crate) control_value: Option<String>,
 }
 
 /// The result of an operation
 #[derive(Clone, Debug, PartialEq)]
-pub struct LdapResult {
+pub(crate) struct LdapResult {
     /// Success or error code
-    pub result_code: ResultCode,
-    pub matched_dn: LdapDn,
+    pub(crate) result_code: ResultCode,
+    pub(crate) matched_dn: LdapDn,
     /// Additional diagnostic message
-    pub diagnostic_message: String,
+    pub(crate) diagnostic_message: String,
     // Referral ::= SEQUENCE SIZE (1..MAX) OF uri URI
     //
     // URI ::= LDAPString     -- limited to characters permitted in URIs
-    pub referral: Option<Vec<Uri>>,
+    pub(crate) referral: Option<Vec<Uri>>,
 }
 
 impl Deserialize for LdapResult {
@@ -297,10 +297,10 @@ impl Deserialize for LdapResult {
 
 /// A wrapper around `LdapResult` that deserializes just the fields as some
 /// operations return `COMPONENTS OF LDAPResult`
-pub struct ComponentsOfLdapResult(LdapResult);
+pub(crate) struct ComponentsOfLdapResult(LdapResult);
 
 impl ComponentsOfLdapResult {
-    pub fn into_inner(self) -> LdapResult {
+    pub(crate) fn into_inner(self) -> LdapResult {
         self.0
     }
 }
@@ -327,7 +327,7 @@ impl Deserialize for ComponentsOfLdapResult {
 
 /// The result code of the operation, non-error codes are marked as such
 #[derive(Clone, Debug, PartialEq)]
-pub enum ResultCode {
+pub(crate) enum ResultCode {
     /// No error occurred
     Success = 0,
     /// The operation is not properly sequenced with relation to other
@@ -499,19 +499,19 @@ impl Deserialize for ResultCode {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct AttributeValueAssertion {
+pub(crate) struct AttributeValueAssertion {
     /// The attribute description to match on
-    pub attribute_description: AttributeDescription,
+    pub(crate) attribute_description: AttributeDescription,
     /// The attribute value to match on
-    pub assertion_value: AssertionValue,
+    pub(crate) assertion_value: AssertionValue,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PartialAttribute {
+pub(crate) struct PartialAttribute {
     /// The attribute description
-    pub r#type: AttributeDescription,
+    pub(crate) r#type: AttributeDescription,
     /// Zero or more attribute values associated with the attribute description
-    pub vals: Set<AttributeValue>,
+    pub(crate) vals: Set<AttributeValue>,
 }
 
 impl Deserialize for PartialAttribute {

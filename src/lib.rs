@@ -12,3 +12,4 @@
 
 pub mod ber;
 mod protocol_types;
+mod search_filter;

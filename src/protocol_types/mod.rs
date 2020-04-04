@@ -1,9 +1,9 @@
-mod abandon;
-mod bind;
-mod compare;
-mod extended;
-mod modify;
-mod search;
+pub(crate) mod abandon;
+pub(crate) mod bind;
+pub(crate) mod compare;
+pub(crate) mod extended;
+pub(crate) mod modify;
+pub(crate) mod search;
 
 use crate::ber::{
     util::{serialize_sequence, ReadExt, VecExt},
@@ -19,7 +19,7 @@ pub(crate) type Uri = String;
 
 /// A UTF-8 string that is constrained to <attributedescription>
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct AttributeDescription(String);
+pub(crate) struct AttributeDescription(pub(crate) String);
 
 impl Deserialize for AttributeDescription {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {

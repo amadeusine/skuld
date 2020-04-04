@@ -701,6 +701,39 @@ mod tests {
                 size_limit: 0,
                 time_limit: 0,
                 types_only: false,
+                filter: Filter::ExtensibleMatch(MatchingRuleAssertion {
+                    matching_rule: Some(s!("2.4.6.8.10")),
+                    r#type: Some(AttributeDescription(s!("sn"))),
+                    match_value: s!("Barney Rubble"),
+                    dn_attributes: false,
+                }),
+                attributes: vec![],
+            }),
+            controls: None,
+        };
+
+        let encoded = &[
+            0x30, 0x4a, 0x02, 0x01, 0x02, 0x63, 0x45, 0x04, 0x11, 0x64, 0x63, 0x3d, 0x65, 0x78,
+            0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x6f, 0x72, 0x67, 0x0a, 0x01,
+            0x02, 0x0a, 0x01, 0x00, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00, 0x01, 0x01, 0x00, 0xa9,
+            0x1f, 0x81, 0x0a, 0x32, 0x2e, 0x34, 0x2e, 0x36, 0x2e, 0x38, 0x2e, 0x31, 0x30, 0x82,
+            0x02, 0x73, 0x6e, 0x83, 0x0d, 0x42, 0x61, 0x72, 0x6e, 0x65, 0x79, 0x20, 0x52, 0x75,
+            0x62, 0x62, 0x6c, 0x65, 0x30, 0x00,
+        ];
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+        assert_eq!(buffer, &encoded[..]);
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::SearchRequest(SearchRequest {
+                base_object: LdapDn(s!("dc=example,dc=org")),
+                scope: Scope::WholeSubtree,
+                deref_alias: DerefAlias::NeverDerefAlias,
+                size_limit: 0,
+                time_limit: 0,
+                types_only: false,
                 filter: Filter::And(vec![
                     Filter::EqualityMatch(AttributeValueAssertion {
                         attribute_description: AttributeDescription(s!("objectClass")),

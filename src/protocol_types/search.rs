@@ -224,12 +224,10 @@ impl Serialize for Filter {
                     Length::new(em.match_value.as_bytes().len() as u64).serialize(buffer);
                     buffer.write(em.match_value.as_bytes());
 
-                    DN_ATTRIBUTES.serialize(buffer);
-                    Length::new(1).serialize(buffer);
-
-                    match em.dn_attributes {
-                        true => buffer.write_byte(0xFF),
-                        false => buffer.write_byte(0x00),
+                    if em.dn_attributes {
+                        DN_ATTRIBUTES.serialize(buffer);
+                        Length::new(1).serialize(buffer);
+                        buffer.write_byte(0xFF)
                     }
                 });
             }

@@ -592,7 +592,9 @@ mod tests {
 
     #[test]
     fn bind_response() {
-        let message = b"\x30\x0c\x02\x01\x01\x61\x07\x0a\x01\x00\x04\x00\x04\x00";
+        let message =
+            &[0x30, 0x0c, 0x02, 0x01, 0x01, 0x61, 0x07, 0x0a, 0x01, 0x00, 0x04, 0x00, 0x04, 0x00];
+
         assert_eq!(
             LdapMessage::deserialize(&mut &message[..]),
             Ok(LdapMessage {
@@ -656,6 +658,160 @@ mod tests {
         let mut buffer = Vec::new();
         message.serialize(&mut buffer);
         assert_eq!(buffer, &encoded[..]);
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::SearchRequest(SearchRequest {
+                base_object: LdapDn(s!("dc=example,dc=org")),
+                scope: Scope::WholeSubtree,
+                deref_alias: DerefAlias::NeverDerefAlias,
+                size_limit: 0,
+                time_limit: 0,
+                types_only: false,
+                filter: Filter::ExtensibleMatch(MatchingRuleAssertion {
+                    matching_rule: Some(s!("2.4.6.8.10")),
+                    r#type: Some(AttributeDescription(s!("sn"))),
+                    match_value: s!("Barney Rubble"),
+                    dn_attributes: true,
+                }),
+                attributes: vec![],
+            }),
+            controls: None,
+        };
+
+        let encoded = &[
+            0x30, 0x4d, 0x02, 0x01, 0x02, 0x63, 0x48, 0x04, 0x11, 0x64, 0x63, 0x3d, 0x65, 0x78,
+            0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x6f, 0x72, 0x67, 0x0a, 0x01,
+            0x02, 0x0a, 0x01, 0x00, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00, 0x01, 0x01, 0x00, 0xa9,
+            0x22, 0x81, 0x0a, 0x32, 0x2e, 0x34, 0x2e, 0x36, 0x2e, 0x38, 0x2e, 0x31, 0x30, 0x82,
+            0x02, 0x73, 0x6e, 0x83, 0x0d, 0x42, 0x61, 0x72, 0x6e, 0x65, 0x79, 0x20, 0x52, 0x75,
+            0x62, 0x62, 0x6c, 0x65, 0x84, 0x01, 0xff, 0x30, 0x00,
+        ];
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+        assert_eq!(buffer, &encoded[..]);
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::SearchRequest(SearchRequest {
+                base_object: LdapDn(s!("dc=example,dc=org")),
+                scope: Scope::WholeSubtree,
+                deref_alias: DerefAlias::NeverDerefAlias,
+                size_limit: 0,
+                time_limit: 0,
+                types_only: false,
+                filter: Filter::And(vec![
+                    Filter::EqualityMatch(AttributeValueAssertion {
+                        attribute_description: AttributeDescription(s!("objectClass")),
+                        assertion_value: s!("Person"),
+                    }),
+                    Filter::Or(vec![
+                        Filter::EqualityMatch(AttributeValueAssertion {
+                            attribute_description: AttributeDescription(s!("sn")),
+                            assertion_value: s!("Jensen"),
+                        }),
+                        Filter::Substrings(SubstringFilter {
+                            r#type: AttributeDescription(s!("cn")),
+                            substrings: vec![Substring::Initial(s!("Babs J"))],
+                        }),
+                    ]),
+                ]),
+                attributes: vec![],
+            }),
+            controls: None,
+        };
+
+        let encoded = &[
+            0x30, 0x62, 0x02, 0x01, 0x02, 0x63, 0x5d, 0x04, 0x11, 0x64, 0x63, 0x3d, 0x65, 0x78,
+            0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x6f, 0x72, 0x67, 0x0a, 0x01,
+            0x02, 0x0a, 0x01, 0x00, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00, 0x01, 0x01, 0x00, 0xa0,
+            0x37, 0xa3, 0x15, 0x04, 0x0b, 0x6f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x43, 0x6c, 0x61,
+            0x73, 0x73, 0x04, 0x06, 0x50, 0x65, 0x72, 0x73, 0x6f, 0x6e, 0xa1, 0x1e, 0xa3, 0x0c,
+            0x04, 0x02, 0x73, 0x6e, 0x04, 0x06, 0x4a, 0x65, 0x6e, 0x73, 0x65, 0x6e, 0xa4, 0x0e,
+            0x04, 0x02, 0x63, 0x6e, 0x30, 0x08, 0x80, 0x06, 0x42, 0x61, 0x62, 0x73, 0x20, 0x4a,
+            0x30, 0x00,
+        ];
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+        assert_eq!(buffer, &encoded[..]);
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::SearchRequest(SearchRequest {
+                base_object: LdapDn(s!("dc=example,dc=org")),
+                scope: Scope::WholeSubtree,
+                deref_alias: DerefAlias::NeverDerefAlias,
+                size_limit: 0,
+                time_limit: 0,
+                types_only: false,
+                filter: Filter::Present(AttributeDescription(s!("o"))),
+                attributes: vec![],
+            }),
+            controls: None,
+        };
+
+        let encoded = &[
+            0x30, 0x2c, 0x02, 0x01, 0x02, 0x63, 0x27, 0x04, 0x11, 0x64, 0x63, 0x3d, 0x65, 0x78,
+            0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x6f, 0x72, 0x67, 0x0a, 0x01,
+            0x02, 0x0a, 0x01, 0x00, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00, 0x01, 0x01, 0x00, 0x87,
+            0x01, 0x6f, 0x30, 0x00,
+        ];
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+        assert_eq!(buffer, &encoded[..]);
+
+        let message = LdapMessage {
+            message_id: 2,
+            protocol_operation: ProtocolOperation::SearchRequest(SearchRequest {
+                base_object: LdapDn(s!("dc=example,dc=org")),
+                scope: Scope::WholeSubtree,
+                deref_alias: DerefAlias::NeverDerefAlias,
+                size_limit: 0,
+                time_limit: 0,
+                types_only: false,
+                filter: Filter::And(vec![
+                    Filter::Not(Box::new(Filter::EqualityMatch(AttributeValueAssertion {
+                        attribute_description: AttributeDescription(s!("org")),
+                        assertion_value: s!("Example Co"),
+                    }))),
+                    Filter::And(vec![
+                        Filter::GreaterOrEqual(AttributeValueAssertion {
+                            attribute_description: AttributeDescription(s!("count")),
+                            assertion_value: s!("1"),
+                        }),
+                        Filter::LessOrEqual(AttributeValueAssertion {
+                            attribute_description: AttributeDescription(s!("losses")),
+                            assertion_value: s!("5"),
+                        }),
+                        Filter::ApproximateMatch(AttributeValueAssertion {
+                            attribute_description: AttributeDescription(s!("name")),
+                            assertion_value: s!("Pickle Rick"),
+                        }),
+                    ]),
+                ]),
+                attributes: vec![],
+            }),
+            controls: None,
+        };
+
+        let encoded = &[
+            0x30, 0x70, 0x02, 0x01, 0x02, 0x63, 0x6b, 0x04, 0x11, 0x64, 0x63, 0x3d, 0x65, 0x78,
+            0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2c, 0x64, 0x63, 0x3d, 0x6f, 0x72, 0x67, 0x0a, 0x01,
+            0x02, 0x0a, 0x01, 0x00, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00, 0x01, 0x01, 0x00, 0xa0,
+            0x45, 0xa2, 0x13, 0xa3, 0x11, 0x04, 0x03, 0x6f, 0x72, 0x67, 0x04, 0x0a, 0x45, 0x78,
+            0x61, 0x6d, 0x70, 0x6c, 0x65, 0x20, 0x43, 0x6f, 0xa0, 0x2e, 0xa5, 0x0a, 0x04, 0x05,
+            0x63, 0x6f, 0x75, 0x6e, 0x74, 0x04, 0x01, 0x31, 0xa6, 0x0b, 0x04, 0x06, 0x6c, 0x6f,
+            0x73, 0x73, 0x65, 0x73, 0x04, 0x01, 0x35, 0xa8, 0x13, 0x04, 0x04, 0x6e, 0x61, 0x6d,
+            0x65, 0x04, 0x0b, 0x50, 0x69, 0x63, 0x6b, 0x6c, 0x65, 0x20, 0x52, 0x69, 0x63, 0x6b,
+            0x30, 0x00,
+        ];
+
+        let mut buffer = Vec::new();
+        message.serialize(&mut buffer);
+        assert_eq!(buffer, &encoded[..]);
     }
 
     #[test]
@@ -699,7 +855,8 @@ mod tests {
 
     #[test]
     fn search_result_done() {
-        let message = b"\x30\x0c\x02\x01\x02\x65\x07\x0a\x01\x20\x04\x00\x04\x00";
+        let message =
+            &[0x30, 0x0c, 0x02, 0x01, 0x02, 0x65, 0x07, 0x0a, 0x01, 0x20, 0x04, 0x00, 0x04, 0x00];
 
         assert_eq!(
             LdapMessage::deserialize(&mut &message[..]),

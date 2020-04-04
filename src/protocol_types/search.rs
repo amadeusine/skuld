@@ -197,7 +197,42 @@ impl Serialize for Filter {
                     ava.assertion_value.serialize(buffer);
                 });
             }
-            Filter::ExtensibleMatch(_) => todo!("extensible match serialization"),
+            Filter::ExtensibleMatch(em) => {
+                const MATCHING_RULE: Tag =
+                    Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 1);
+                const TYPE: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 2);
+                const MATCH_VALUE: Tag =
+                    Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 3);
+                const DN_ATTRIBUTES: Tag =
+                    Tag::from_parts(Class::ContextSpecific, Aspect::Primitive, 4);
+
+                EXTENSIBLE_MATCH.serialize(buffer);
+                serialize_sequence(buffer, |buffer| {
+                    if let Some(matching_rule) = &em.matching_rule {
+                        MATCHING_RULE.serialize(buffer);
+                        Length::new(matching_rule.as_bytes().len() as u64).serialize(buffer);
+                        buffer.write(matching_rule.as_bytes());
+                    }
+
+                    if let Some(ty) = &em.r#type {
+                        TYPE.serialize(buffer);
+                        Length::new(ty.0.as_bytes().len() as u64).serialize(buffer);
+                        buffer.write(ty.0.as_bytes());
+                    }
+
+                    MATCH_VALUE.serialize(buffer);
+                    Length::new(em.match_value.as_bytes().len() as u64).serialize(buffer);
+                    buffer.write(em.match_value.as_bytes());
+
+                    DN_ATTRIBUTES.serialize(buffer);
+                    Length::new(1).serialize(buffer);
+
+                    match em.dn_attributes {
+                        true => buffer.write_byte(0xFF),
+                        false => buffer.write_byte(0x00),
+                    }
+                });
+            }
         }
     }
 }

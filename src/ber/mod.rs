@@ -122,7 +122,8 @@
 //! that could follow. Optional types are simply not encoded into the message if
 //! they are not present, which means you must check for end-of-message or peek
 //! the tag of the next type to see if you should decode it. A good example of
-//! this is the referral field on the `LDAPResult` type (section 4.1.9).
+//! this is the referral field on the `LDAPResult` type ([section
+//! 4.1.9](https://tools.ietf.org/html/rfc4511#section-4.1.9)).
 //!
 //! ## Basic Encoding Rules (BER)
 //!
@@ -169,7 +170,8 @@
 //! ## Putting it all together
 //!
 //! Here is an example of all of these concepts put together. Suppose we have
-//! the type defined in section 4.9: `ModifyDNRequest`
+//! the type defined in [section
+//! 4.9](https://tools.ietf.org/html/rfc4511#section-4.9): `ModifyDNRequest`
 //!
 //! ```notrust
 //! ModifyDNRequest ::= [APPLICATION 12] SEQUENCE {
@@ -197,14 +199,15 @@
 //! ```
 //!
 //! All operations in LDAP are done through the `LDAPMessage` type which has
-//! some additional fields to the ones in `ModifyDNRequest` above, see section
-//! 4.1.1 for the full definition of `LDAPMessage`. So we need to decode that as
-//! well. Looking at the first byte we see `30`, the expected type tag of
-//! `SEQUENCE`, a universal, constructed type with a type tag value of `10`
-//! (hex). Now onto the length: `49`, which has a bit pattern of: 0|1001001.
-//! This means we're dealing with a short definite length and the content is 73
-//! bytes long. Decoding the next portion is the `messageID` field of
-//! `LDAPMessage` which is an integer, length 1, with a value of 2 (`02 01 02`).
+//! some additional fields to the ones in `ModifyDNRequest` above, see [section
+//! 4.1.1](https://tools.ietf.org/html/rfc4511#section-4.1.1) for the full
+//! definition of `LDAPMessage`. So we need to decode that as well. Looking at
+//! the first byte we see `30`, the expected type tag of `SEQUENCE`, a
+//! universal, constructed type with a type tag value of `10` (hex). Now onto
+//! the length: `49`, which has a bit pattern of: 0|1001001. This means we're
+//! dealing with a short definite length and the content is 73 bytes long.
+//! Decoding the next portion is the `messageID` field of `LDAPMessage` which is
+//! an integer, length 1, with a value of 2 (`02 01 02`).
 //!
 //! The protocol operation is the next thing up -- our `ModifyDNRequest` of
 //! which we expect to find an application-specific, constructed type with a tag

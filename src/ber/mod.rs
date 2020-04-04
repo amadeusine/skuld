@@ -221,18 +221,17 @@
 //! disguise, with the bytes defining it: `04 0c 75 69 64 3d 74 65 73 74 2e 75
 //! 73 72`, easy enough: `uid=test.usr`. `deletoldrdn` is a bool, which has a
 //! tag number of 1, and only has a length of one, whose value is `00`. LDAP
-//! defines boolean `TRUE` to be `FF`, so this is `FALSE`.
+//! defines boolean `TRUE` to be `FF`, so this is `FALSE`. The next field,
+//! `newSuperior`, is an optional context-specific `LDAPDN`. So we check to see
+//! if we're at the end of the buffer yet -- nope! still have more bytes to
+//! process, then we check the tag: `80` has a bit pattern of `10|0|00000` which
+//! tells us its a context-specific, universal type with a tag number of 0,
+//! that's our type! The length and content are decoded as usual.
 //!
-//! The next field, `newSuperior`, is an optional context-specific `LDAPDN`. So
-//! we check to see if we're at the end of the message yet -- nope! still have
-//! more bytes to process, then we check the tag: `80` has a bit pattern of
-//! `10|0|00000` which tells us its a context-specific, universal type with a
-//! tag number of 0, that's our type! The length and content are decoded as
-//! usual. We're still not done however, we finished decoding `ModifyDNRequest`,
-//! but we still have the `controls` field of `LDAPMessage`, which is also an
-//! optional type. Check one: have we reached the end of the packet? As a matter
-//! of fact, yes, we have! Therefore `controls` is `None` and we've finished
-//! decoding the entire packet!
+//! We finished decoding `ModifyDNRequest`, but we still have the `controls`
+//! field of `LDAPMessage`, which is also an optional type. Check one: have we
+//! reached the end of the packet? As a matter of fact, yes, we have! Therefore
+//! `controls` is `None` and we've finished decoding the entire packet!
 //!
 //! Here's a more graphical representation of the above packet (lengths in
 //! brackets):

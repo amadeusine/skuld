@@ -6,3 +6,9 @@
 //! ## Examples
 //!
 //! TODO: when code exists
+
+#![warn(missing_docs)]
+#![allow(dead_code, clippy::match_bool)]
+
+pub mod ber;
+mod protocol_types;

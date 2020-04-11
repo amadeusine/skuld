@@ -611,6 +611,19 @@ impl Serialize for bool {
     }
 }
 
+impl Deserialize for bool {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(BOOL)?;
+        let length = Length::deserialize(buffer)?;
+        let val = buffer.uint(length)?;
+
+        Ok(match val {
+            0xFF => true,
+            _ => false,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

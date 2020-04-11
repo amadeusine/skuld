@@ -7,8 +7,8 @@ mod search;
 
 use crate::ber::{
     util::{serialize_sequence, ReadExt, VecExt},
-    Aspect, Class, Deserialize, DeserializeError, Length, Serialize, Set, Tag, ENUMERATED,
-    SEQUENCE,
+    Aspect, Class, Deserialize, DeserializeError, Length, Serialize, Set, Tag, BOOL, ENUMERATED,
+    OCTET_STRING, SEQUENCE,
 };
 
 pub(crate) use {abandon::*, bind::*, compare::*, extended::*, modify::*, search::*};
@@ -108,8 +108,13 @@ impl Serialize for LdapMessage {
             self.message_id.serialize(buffer);
             self.protocol_operation.serialize(buffer);
 
-            if let Some(_controls) = &self.controls {
-                todo!("controls serialization")
+            if let Some(controls) = &self.controls {
+                CONTROLS.serialize(buffer);
+                serialize_sequence(buffer, |buffer| {
+                    for control in controls {
+                        control.serialize(buffer);
+                    }
+                });
             }
         });
     }
@@ -124,7 +129,18 @@ impl Deserialize for LdapMessage {
         let message_id = i32::deserialize(buffer)?;
         let protocol_operation = ProtocolOperation::deserialize(buffer)?;
         let controls = match buffer.peek_tag(CONTROLS) {
-            Ok(_) => todo!("controls deserialization"),
+            Ok(_) => {
+                buffer.tag(CONTROLS)?;
+                let length = Length::deserialize(buffer)?;
+                let buffer = &mut buffer.slice(length)?;
+                let mut controls = Vec::new();
+
+                while !buffer.is_empty() {
+                    controls.push(Control::deserialize(buffer)?);
+                }
+
+                Some(controls)
+            }
             Err(DeserializeError::BadTag { .. }) => None,
             Err(DeserializeError::BufferTooShort) => None,
             Err(e) => return Err(e),
@@ -260,6 +276,47 @@ pub(crate) struct Control {
     pub(crate) control_value: Option<String>,
 }
 
+impl Serialize for Control {
+    fn serialize(&self, buffer: &mut dyn VecExt) {
+        SEQUENCE.serialize(buffer);
+        serialize_sequence(buffer, |buffer| {
+            self.control_type.serialize(buffer);
+
+            if self.criticality {
+                self.criticality.serialize(buffer);
+            }
+
+            if let Some(control_value) = &self.control_value {
+                control_value.serialize(buffer);
+            }
+        });
+    }
+}
+
+impl Deserialize for Control {
+    fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        buffer.tag(SEQUENCE)?;
+        let length = Length::deserialize(buffer)?;
+        let buffer = &mut buffer.slice(length)?;
+
+        let control_type = LdapOid::deserialize(buffer)?;
+        let criticality = match buffer.peek_tag(BOOL) {
+            Ok(_) => bool::deserialize(buffer)?,
+            Err(DeserializeError::BadTag { .. }) => false,
+            Err(DeserializeError::BufferTooShort) => false,
+            Err(e) => return Err(e),
+        };
+        let control_value = match buffer.peek_tag(OCTET_STRING) {
+            Ok(_) => Some(String::deserialize(buffer)?),
+            Err(DeserializeError::BadTag { .. }) => None,
+            Err(DeserializeError::BufferTooShort) => None,
+            Err(e) => return Err(e),
+        };
+
+        Ok(Self { control_type, control_value, criticality })
+    }
+}
+
 /// The result of an operation
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct LdapResult {
@@ -276,16 +333,27 @@ pub(crate) struct LdapResult {
 
 impl Deserialize for LdapResult {
     fn deserialize(buffer: &mut &[u8]) -> Result<Self, DeserializeError> {
+        const REFERRAL: Tag = Tag::from_parts(Class::ContextSpecific, Aspect::Constructed, 3);
+
         buffer.tag(SEQUENCE)?;
         let result_code = ResultCode::deserialize(buffer)?;
         let matched_dn = LdapDn::deserialize(buffer)?;
         let diagnostic_message = String::deserialize(buffer)?;
-        let referral = match buffer.peek_tag(Tag::from_parts(
-            Class::ContextSpecific,
-            Aspect::Constructed,
-            3,
-        )) {
-            Ok(_) => todo!("referral deserialization"),
+        let referral = match buffer.peek_tag(REFERRAL) {
+            Ok(_) => {
+                buffer.tag(REFERRAL)?;
+                let length = Length::deserialize(buffer)?;
+                let buffer = &mut buffer.slice(length)?;
+                let mut referrals = Vec::new();
+
+                while !buffer.is_empty() {
+                    // FIXME: replace with a wrapper type that validates the
+                    // characters in the URI
+                    referrals.push(String::deserialize(buffer)?);
+                }
+
+                Some(referrals)
+            }
             Err(DeserializeError::BadTag { .. }) => None,
             Err(DeserializeError::BufferTooShort) => None,
             Err(e) => return Err(e),

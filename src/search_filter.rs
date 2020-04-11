@@ -69,7 +69,8 @@ fn filter_list(s: &str) -> IResult<&str, Vec<search::Filter>> {
 
 /// item           = simple / present / substring / extensible
 fn item(s: &str) -> IResult<&str, search::Filter> {
-    alt((present, substring, simple, extensible))(s)
+    // Note: present is handled in `substring`
+    alt((substring, simple, extensible))(s)
 }
 
 /// simple         = attr filtertype assertionvalue
@@ -98,6 +99,15 @@ fn present(s: &str) -> IResult<&str, search::Filter> {
 
 /// substring      = attr EQUALS [initial] any [final]
 fn substring(s: &str) -> IResult<&str, search::Filter> {
+    // We need to disambiguate between (foo=*), which matches both `substring`
+    // and `present` in the grammar, but the spec mandates it match `present`
+    // I hope this is enough to do so
+    if let Ok((s, f)) = present(s) {
+        if s.chars().next() == Some(')') {
+            return Ok((s, f));
+        }
+    }
+
     let (s, (attr_desc, _, initial, any_substrings, fin)) =
         tuple((attr, ch(EQUALS), opt(assertion_value), any_substring, opt(assertion_value)))(s)?;
 
@@ -106,6 +116,15 @@ fn substring(s: &str) -> IResult<&str, search::Filter> {
         search::Filter::Substrings(search::SubstringFilter {
             r#type: pt::AttributeDescription(attr_desc.to_string()),
             substrings: match (initial, fin) {
+                (None, Some(fin)) | (Some(""), Some(fin)) => {
+                    let mut v = vec![];
+                    v.extend(
+                        any_substrings.into_iter().map(|s| search::Substring::Any(s.to_string())),
+                    );
+                    v.push(search::Substring::Final(fin.to_string()));
+
+                    v
+                }
                 (Some(initial), None) | (Some(initial), Some("")) => {
                     let mut v = vec![search::Substring::Initial(initial.to_string())];
                     v.extend(
@@ -116,15 +135,6 @@ fn substring(s: &str) -> IResult<&str, search::Filter> {
                 }
                 (Some(initial), Some(fin)) => {
                     let mut v = vec![search::Substring::Initial(initial.to_string())];
-                    v.extend(
-                        any_substrings.into_iter().map(|s| search::Substring::Any(s.to_string())),
-                    );
-                    v.push(search::Substring::Final(fin.to_string()));
-
-                    v
-                }
-                (None, Some(fin)) => {
-                    let mut v = vec![];
                     v.extend(
                         any_substrings.into_iter().map(|s| search::Substring::Any(s.to_string())),
                     );
@@ -427,6 +437,15 @@ mod tests {
         assert_eq!(
             parse_search_string(filter).unwrap(),
             search::Filter::Present(pt::AttributeDescription(s!("cn")))
+        );
+
+        let filter = "(cn=*Text)";
+        assert_eq!(
+            parse_search_string(filter).unwrap(),
+            search::Filter::Substrings(search::SubstringFilter {
+                r#type: pt::AttributeDescription(s!("cn")),
+                substrings: vec![search::Substring::Final(s!("Text")),],
+            })
         );
     }
 
